@@ -1,0 +1,51 @@
+{
+  "name": "computer-agents",
+  "repository": "https://github.com/computer-agents/computer-agents-sdk",
+  "homepage": "https://computer-agents.com",
+  "version": "2.4.0",
+  "description": "Official SDK for the Computer Agents Cloud API. Execute Claude-powered AI agents in isolated cloud containers.",
+  "author": "Computer Agents",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "build-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "keywords": [
+    "computer-agents",
+    "ai",
+    "agents",
+    "claude",
+    "anthropic",
+    "cloud",
+    "api",
+    "sdk",
+    "automation",
+    "code-generation",
+    "mcp"
+  ],
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
