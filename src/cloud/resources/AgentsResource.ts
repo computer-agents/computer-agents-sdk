@@ -10,6 +10,8 @@
 
 import type { ApiClient } from '../ApiClient';
 import type {
+  AgentAnalyticsResponse,
+  AgentModelCatalogEntry,
   CloudAgent,
   CreateAgentParams,
   UpdateAgentParams,
@@ -44,6 +46,20 @@ export class AgentsResource {
   }
 
   /**
+   * List managed and external model entries available in the current workspace.
+   */
+  async listModels(): Promise<{
+    tier?: string;
+    models: AgentModelCatalogEntry[];
+  }> {
+    const response = await this.client.get<{ tier?: string; models: AgentModelCatalogEntry[] }>(`/agents/models`);
+    return {
+      tier: response.tier,
+      models: response.models,
+    };
+  }
+
+  /**
    * Get an agent by ID
    */
   async get(agentId: string): Promise<CloudAgent> {
@@ -65,6 +81,13 @@ export class AgentsResource {
       params
     );
     return response.agent;
+  }
+
+  /**
+   * Summarize recent activity for an agent or team.
+   */
+  async getAnalytics(agentId: string): Promise<AgentAnalyticsResponse> {
+    return this.client.get(`/agents/${agentId}/analytics`);
   }
 
   /**

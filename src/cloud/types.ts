@@ -142,6 +142,27 @@ export interface AvailableRuntimes {
   rust: string[];
 }
 
+export type EnvironmentComputeProfileId = 'lite' | 'standard' | 'power' | 'desktop';
+
+export interface EnvironmentComputeResources {
+  cpuCores: number;
+  memoryMb: number;
+}
+
+export interface EnvironmentPricingMetadata {
+  minutePrice?: number;
+  [key: string]: unknown;
+}
+
+export interface EnvironmentMetadata {
+  computeProfile?: EnvironmentComputeProfileId;
+  computeResources?: EnvironmentComputeResources;
+  pricing?: EnvironmentPricingMetadata;
+  guiEnabled?: boolean;
+  officeAppsEnabled?: boolean;
+  [key: string]: unknown;
+}
+
 export interface Environment {
   id: string;
   userId: string;
@@ -170,6 +191,7 @@ export interface Environment {
   buildLogs?: string;
   lastBuildAt?: string;
   imageTag?: string;
+  metadata?: EnvironmentMetadata | null;
 
   // Metadata
   isDefault?: boolean;
@@ -182,8 +204,15 @@ export interface Environment {
   projectId?: string;
 }
 
+/**
+ * ACP product surfaces refer to environments as computers.
+ * The underlying API still uses `environment` in route names.
+ */
+export type Computer = Environment;
+
 export interface CreateEnvironmentParams {
   name: string;
+  projectId?: string | null;
   description?: string;
   runtimes?: RuntimeConfig;
   packages?: PackagesConfig;
@@ -195,10 +224,15 @@ export interface CreateEnvironmentParams {
   documentation?: string[];
   internetAccess?: boolean;
   isDefault?: boolean;
+  computeProfile?: EnvironmentComputeProfileId;
+  guiEnabled?: boolean;
+  officeAppsEnabled?: boolean;
+  metadata?: EnvironmentMetadata;
 }
 
 export interface UpdateEnvironmentParams {
   name?: string;
+  projectId?: string | null;
   description?: string;
   runtimes?: RuntimeConfig;
   packages?: PackagesConfig;
@@ -209,7 +243,14 @@ export interface UpdateEnvironmentParams {
   mcpServers?: McpServer[];
   internetAccess?: boolean;
   isDefault?: boolean;
+  computeProfile?: EnvironmentComputeProfileId;
+  guiEnabled?: boolean;
+  officeAppsEnabled?: boolean;
+  metadata?: EnvironmentMetadata;
 }
+
+export type CreateComputerParams = CreateEnvironmentParams;
+export type UpdateComputerParams = UpdateEnvironmentParams;
 
 export interface ContainerStatus {
   status: EnvironmentStatus;
@@ -221,6 +262,11 @@ export interface ContainerStatus {
   cpu?: {
     usage: number;
   };
+  containerId?: string;
+  startedAt?: string;
+  lastUsedAt?: string;
+  executionCount?: number;
+  message?: string;
 }
 
 export interface BuildResult {
@@ -285,6 +331,107 @@ export interface StartContainerResult {
   containerId: string;
   imageTag: string;
   workspacePath: string;
+}
+
+export interface EnvironmentSnapshot {
+  id: string;
+  environmentId: string;
+  sourceThreadId?: string | null;
+  sourceStepId?: string | null;
+  parentSnapshotId?: string | null;
+  ledgerCommitSha?: string;
+  changedPaths?: string[];
+  additions?: number;
+  deletions?: number;
+  metadata?: Record<string, unknown> | null;
+  createdAt?: string;
+}
+
+export type EnvironmentChangeKind = 'created' | 'modified' | 'deleted';
+export type EnvironmentChangeOperation = 'created' | 'uploaded' | 'modified' | 'deleted';
+export type EnvironmentChangeSourceKind = 'thread' | 'manual';
+
+export interface EnvironmentChangeFileRecord {
+  path: string;
+  name: string;
+  changeKind: EnvironmentChangeKind;
+  operation: EnvironmentChangeOperation;
+  entryType: 'file' | 'directory';
+  previousPath?: string | null;
+  additions: number;
+  deletions: number;
+  diff?: string | null;
+  fileContent?: string | null;
+}
+
+export interface EnvironmentChangeEntry {
+  id: string;
+  snapshotId: string;
+  environmentId: string;
+  createdAt: string;
+  title: string;
+  routeSource?: string | null;
+  sourceKind: EnvironmentChangeSourceKind;
+  sourceThreadId?: string | null;
+  sourceStepId?: string | null;
+  threadTitle?: string | null;
+  stepTitle?: string | null;
+  projectId?: string | null;
+  projectName?: string | null;
+  agentId?: string | null;
+  agentName?: string | null;
+  additions: number;
+  deletions: number;
+  files: EnvironmentChangeFileRecord[];
+}
+
+export interface EnvironmentChangeListResponse {
+  object: 'list';
+  limit: number;
+  offset: number;
+  total: number;
+  hasMore: boolean;
+  data: EnvironmentChangeEntry[];
+}
+
+export interface SnapshotFileEntry {
+  path: string;
+  name: string;
+  type: 'file' | 'directory';
+  size: number | null;
+}
+
+export interface EnvironmentSnapshotFilesResponse {
+  object: 'list';
+  environmentId: string;
+  snapshotId: string;
+  prefix?: string | null;
+  data: SnapshotFileEntry[];
+}
+
+export interface EnvironmentSnapshotDiffResponse {
+  environmentId: string;
+  snapshotId: string;
+  parentSnapshotId?: string | null;
+  fromCommitSha?: string | null;
+  toCommitSha: string;
+  path?: string | null;
+  diff: string;
+  changedPaths: string[];
+  additions: number;
+  deletions: number;
+}
+
+export interface EnvironmentSnapshotFileResponse {
+  path: string;
+  snapshotId: string | null;
+  content: string;
+}
+
+export interface EnvironmentForkFromSnapshotResponse {
+  environment: Environment;
+  snapshot: EnvironmentSnapshot | null;
+  sourceSnapshotId: string;
 }
 
 // ============================================================================
@@ -551,11 +698,21 @@ export interface RunDiff {
 // Agent Types
 // ============================================================================
 
+export type BuiltinAgentModel =
+  | 'claude-opus-4-7'
+  | 'claude-opus-4-6'
+  | 'claude-sonnet-4-5'
+  | 'claude-haiku-4-5'
+  | 'gemini-3-flash'
+  | 'gemini-3-1-pro';
+
+export type ExternalAgentModel = `external:${string}`;
+
 /**
- * Supported Claude models for agent execution.
- * All agents run via Claude Code CLI in containers.
+ * Agent model identifiers can refer to built-in managed models or
+ * workspace-connected external inference endpoints.
  */
-export type AgentModel = 'claude-opus-4-6' | 'claude-sonnet-4-5' | 'claude-haiku-4-5';
+export type AgentModel = BuiltinAgentModel | ExternalAgentModel | (string & {});
 
 /**
  * Reasoning effort level for extended thinking.
@@ -606,10 +763,200 @@ export interface UpdateAgentParams {
   description?: string;
   model?: AgentModel;
   instructions?: string;
+  binary?: AgentBinary;
   reasoningEffort?: ReasoningEffort;
   enabledSkills?: string[];
+  deepResearchModel?: DeepResearchModel;
   metadata?: Record<string, unknown>;
 }
+
+export interface AgentModelCatalogEntry {
+  id: string;
+  label?: string;
+  description?: string;
+  intelligence?: string;
+  contextWindow?: string;
+  speed?: string;
+  source?: 'managed' | 'external' | string;
+  providerType?: string | null;
+  requiredTier?: string;
+  locked?: boolean;
+}
+
+export interface AgentAnalyticsBucket {
+  label: string;
+  requestCount: number;
+  successCount: number;
+  failureCount: number;
+  p95RuntimeMs?: number;
+}
+
+export interface AgentAnalyticsResponse {
+  agentId: string;
+  summary?: Record<string, unknown>;
+  charts?: {
+    activity24h?: AgentAnalyticsBucket[];
+    [key: string]: unknown;
+  };
+}
+
+// ============================================================================
+// Resources, Databases, and Skills
+// ============================================================================
+
+export type ResourceKind = 'web_app' | 'function' | 'auth' | 'agent_runtime';
+export type ResourceAuthMode = 'public' | 'private';
+export type ResourceStatus = 'draft' | 'deploying' | 'deployed' | 'failed' | 'inactive';
+
+export interface Resource {
+  id: string;
+  userId?: string;
+  projectId?: string | null;
+  name: string;
+  description?: string;
+  kind: ResourceKind;
+  sourceType?: string | null;
+  sourceEnvironmentId?: string | null;
+  sourcePath?: string | null;
+  region?: string | null;
+  runtime?: string | null;
+  authMode?: ResourceAuthMode | null;
+  serviceUrl?: string | null;
+  customDomain?: string | null;
+  cloudRunServiceName?: string | null;
+  imageUrl?: string | null;
+  status?: ResourceStatus | null;
+  lastDeployedAt?: string | null;
+  metadata?: Record<string, unknown> | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface CreateResourceParams {
+  projectId?: string | null;
+  name: string;
+  description?: string;
+  kind: ResourceKind;
+  sourceType?: string;
+  sourceEnvironmentId?: string | null;
+  sourcePath?: string | null;
+  region?: string;
+  runtime?: string;
+  authMode?: ResourceAuthMode;
+  serviceUrl?: string | null;
+  customDomain?: string | null;
+  cloudRunServiceName?: string | null;
+  imageUrl?: string | null;
+  status?: ResourceStatus;
+  lastDeployedAt?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface UpdateResourceParams extends Partial<CreateResourceParams> {}
+
+export interface ResourceAnalyticsResponse {
+  serverId: string;
+  serviceName?: string | null;
+  available?: boolean;
+  summary?: Record<string, unknown>;
+  charts?: Record<string, unknown>;
+  recentRequests?: Array<Record<string, unknown>>;
+  deployment?: Record<string, unknown> | null;
+}
+
+export interface ResourceLogEntry {
+  timestamp?: string | null;
+  severity?: string | null;
+  stream?: string | null;
+  message?: string | null;
+  method?: string | null;
+  path?: string | null;
+  status?: number | null;
+}
+
+export interface ResourceBinding {
+  id?: string;
+  targetType?: 'database' | 'auth' | 'agent_runtime' | string;
+  targetId?: string;
+  alias?: string;
+  accessMode?: string;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface Database {
+  id: string;
+  userId?: string;
+  projectId?: string | null;
+  name: string;
+  description?: string;
+  location?: string;
+  status?: 'active' | 'provisioning' | 'error' | string;
+  metadata?: Record<string, unknown> | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreateDatabaseParams {
+  projectId?: string | null;
+  name: string;
+  description?: string;
+  location?: string;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface UpdateDatabaseParams extends Partial<CreateDatabaseParams> {
+  status?: 'active' | 'provisioning' | 'error' | string;
+}
+
+export interface DatabaseCollection {
+  id: string;
+  name: string;
+  description?: string;
+  documentCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface DatabaseDocument {
+  id: string;
+  data: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type SkillCategory = 'research' | 'creative' | 'productivity' | 'development' | 'custom';
+
+export interface SkillFile {
+  name: string;
+  content: string;
+  language?: string;
+}
+
+export interface Skill {
+  id: string;
+  userId?: string;
+  name: string;
+  description?: string;
+  markdown?: string;
+  files?: SkillFile[];
+  icon?: string;
+  category?: SkillCategory;
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreateSkillParams {
+  name: string;
+  description?: string;
+  markdown?: string;
+  files?: SkillFile[];
+  icon?: string;
+  category?: SkillCategory;
+  isActive?: boolean;
+}
+
+export interface UpdateSkillParams extends Partial<CreateSkillParams> {}
 
 // ============================================================================
 // Budget & Billing Types
@@ -846,13 +1193,33 @@ export interface UpdateScheduleParams {
 // Trigger Types
 // ============================================================================
 
-export type TriggerSource = 'github' | 'slack' | 'email' | 'webhook' | 'cron' | 'custom';
+export type TriggerSource = 'github' | 'gitlab' | 'slack' | 'email' | 'webhook' | 'cron' | 'custom';
 
-export interface TriggerAction {
+export interface SendMessageTriggerAction {
   type: 'send_message';
+  prompt?: string;
   message?: string;
   template?: string;
 }
+
+export interface CommentPullRequestTriggerAction {
+  type: 'comment_pull_request';
+  prompt?: string;
+  message?: string;
+  template?: string;
+}
+
+export interface CommentMergeRequestTriggerAction {
+  type: 'comment_merge_request';
+  prompt?: string;
+  message?: string;
+  template?: string;
+}
+
+export type TriggerAction =
+  | SendMessageTriggerAction
+  | CommentPullRequestTriggerAction
+  | CommentMergeRequestTriggerAction;
 
 export interface Trigger {
   id: string;

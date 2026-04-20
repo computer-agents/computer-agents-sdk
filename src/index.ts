@@ -13,7 +13,7 @@
  *
  * // Execute a task
  * const result = await client.run('Create a REST API', {
- *   environmentId: 'env_xxx',
+ *   computerId: 'env_xxx',
  *   onEvent: (event) => console.log(event.type)
  * });
  *
@@ -48,9 +48,17 @@ export type {
 export {
   ProjectsResource,
   EnvironmentsResource,
+  ComputersResource,
   ThreadsResource,
-  RunsResource,
   AgentsResource,
+  ResourcesResource,
+  WebAppsResource,
+  FunctionsResource,
+  AuthResource,
+  AgentRuntimesResource,
+  RuntimesResource,
+  DatabasesResource,
+  SkillsResource,
   BudgetResource,
   BillingResource,
   SchedulesResource,
@@ -64,6 +72,15 @@ export type {
   SendMessageOptions,
   SendMessageResult,
   ListEnvironmentsParams,
+  ListEnvironmentChangesParams,
+  ListResourcesParams,
+  ResourceInvokeParams,
+  ResourceFileUploadParams,
+  ListDatabasesParams,
+  CreateDatabaseCollectionParams,
+  CreateDatabaseDocumentParams,
+  UpdateDatabaseDocumentParams,
+  ListSkillsParams,
 } from './cloud/resources';
 
 // ============================================================================
@@ -86,10 +103,17 @@ export type {
 
   // Environments
   Environment,
+  Computer,
   CreateEnvironmentParams,
+  CreateComputerParams,
   UpdateEnvironmentParams,
+  UpdateComputerParams,
   EnvironmentStatus,
   EnvironmentVariable,
+  EnvironmentComputeProfileId,
+  EnvironmentComputeResources,
+  EnvironmentPricingMetadata,
+  EnvironmentMetadata,
   McpServer,
   ContainerStatus,
   BuildResult,
@@ -106,6 +130,18 @@ export type {
   InstallPackagesResult,
   StartContainerParams,
   StartContainerResult,
+  EnvironmentSnapshot,
+  EnvironmentChangeKind,
+  EnvironmentChangeOperation,
+  EnvironmentChangeSourceKind,
+  EnvironmentChangeFileRecord,
+  EnvironmentChangeEntry,
+  EnvironmentChangeListResponse,
+  SnapshotFileEntry,
+  EnvironmentSnapshotFilesResponse,
+  EnvironmentSnapshotDiffResponse,
+  EnvironmentSnapshotFileResponse,
+  EnvironmentForkFromSnapshotResponse,
 
   // Threads
   Thread,
@@ -146,10 +182,34 @@ export type {
   CloudAgent,
   CreateAgentParams,
   UpdateAgentParams,
+  BuiltinAgentModel,
   AgentModel,
   ReasoningEffort,
   DeepResearchModel,
   AgentBinary,
+  AgentModelCatalogEntry,
+  AgentAnalyticsResponse,
+
+  // Resources / Databases / Skills
+  Resource,
+  CreateResourceParams,
+  UpdateResourceParams,
+  ResourceKind,
+  ResourceAuthMode,
+  ResourceStatus,
+  ResourceAnalyticsResponse,
+  ResourceLogEntry,
+  ResourceBinding,
+  Database,
+  CreateDatabaseParams,
+  UpdateDatabaseParams,
+  DatabaseCollection,
+  DatabaseDocument,
+  Skill,
+  SkillFile,
+  SkillCategory,
+  CreateSkillParams,
+  UpdateSkillParams,
 
   // Budget & Billing
   BudgetStatus,

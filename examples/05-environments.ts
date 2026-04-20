@@ -17,6 +17,7 @@ const client = new ComputerAgentsClient({
 // Create an environment
 const env = await client.environments.create({
   name: 'python-dev',
+  computeProfile: 'standard',
   internetAccess: true,
 });
 
@@ -41,6 +42,7 @@ console.log('Packages installed:', installResult);
 
 // Add environment secrets
 await client.environments.update(env.id, {
+  computeProfile: 'power',
   secrets: [
     { key: 'DATABASE_URL', value: 'postgresql://localhost/mydb' },
     { key: 'API_SECRET', value: 'my-secret-key' },

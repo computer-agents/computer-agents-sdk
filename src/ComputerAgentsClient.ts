@@ -32,8 +32,14 @@ import {
   ProjectsResource,
   EnvironmentsResource,
   ThreadsResource,
-  RunsResource,
   AgentsResource,
+  ResourcesResource,
+  WebAppsResource,
+  FunctionsResource,
+  AuthResource,
+  AgentRuntimesResource,
+  DatabasesResource,
+  SkillsResource,
   BudgetResource,
   BillingResource,
   SchedulesResource,
@@ -48,6 +54,7 @@ import type {
   Project,
   Environment,
   MessageStreamEvent,
+  AgentModel,
 } from './cloud/types';
 
 // Re-export types
@@ -88,10 +95,15 @@ export interface ComputerAgentsClientConfig {
  */
 export interface RunOptions {
   /**
-   * Environment ID to execute in.
-   * If not provided, a default environment is created automatically.
+   * Computer ID to execute in.
+   * The raw API route still uses `environmentId`.
    */
   environmentId?: string;
+
+  /**
+   * Product-level alias for `environmentId`.
+   */
+  computerId?: string;
 
   /**
    * Thread ID to continue (optional - creates new thread if not provided)
@@ -102,7 +114,7 @@ export interface RunOptions {
    * Agent configuration override
    */
   agentConfig?: {
-    model?: 'claude-opus-4-6' | 'claude-sonnet-4-5' | 'claude-haiku-4-5';
+    model?: AgentModel;
     instructions?: string;
     reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high';
   };
@@ -153,12 +165,16 @@ export interface RunResult {
  * resources through typed methods:
  *
  * - `threads` - Conversation management with SSE streaming
- * - `environments` - Environment configuration and container lifecycle
+ * - `environments` / `computers` - Computer configuration and lifecycle
+ * - `resources` - Deployable apps, functions, auth modules, and runtimes
+ * - `webApps` / `functions` / `auth` / `runtimes` - Product-shaped resource managers
+ * - `databases` - Managed database surfaces
+ * - `skills` - Custom ACP skills
  * - `agents` - Agent configuration
- * - `files` - File management (via projects resource)
+ * - `files` - File management in computer workspaces
  * - `schedules` - Scheduled task management
  * - `billing` - Budget and usage tracking
- * - `git` - Git operations on workspaces
+ * - `git` - Git operations on computers (compatibility helper)
  *
  * For simple use cases, use the `run()` method which handles thread
  * creation and streaming automatically.
@@ -200,6 +216,7 @@ export class ComputerAgentsClient {
    * ```typescript
    * const env = await client.environments.create({
    *   name: 'production',
+   *   computeProfile: 'standard',
    *   internetAccess: true
    * });
    * ```
@@ -207,10 +224,15 @@ export class ComputerAgentsClient {
   readonly environments: EnvironmentsResource;
 
   /**
+   * Product-level alias for `environments`.
+   */
+  readonly computers: EnvironmentsResource;
+
+  /**
    * Agent configuration
    *
-   * Create and manage agent configurations with Claude models, instructions, and skills.
-   * All agents execute via Claude Code CLI in isolated containers.
+   * Create and manage agent configurations with built-in or external models,
+   * instructions, and enabled skills.
    *
    * @example
    * ```typescript
@@ -222,6 +244,46 @@ export class ComputerAgentsClient {
    * ```
    */
   readonly agents: AgentsResource;
+
+  /**
+   * Managed resource surfaces such as web apps, functions, auth modules, and agent runtimes.
+   */
+  readonly resources: ResourcesResource;
+
+  /**
+   * First-class web app resource management.
+   */
+  readonly webApps: WebAppsResource;
+
+  /**
+   * First-class function resource management.
+   */
+  readonly functions: FunctionsResource;
+
+  /**
+   * First-class auth resource management.
+   */
+  readonly auth: AuthResource;
+
+  /**
+   * First-class agent runtime management.
+   */
+  readonly runtimes: AgentRuntimesResource;
+
+  /**
+   * Explicit alias for `runtimes`.
+   */
+  readonly agentRuntimes: AgentRuntimesResource;
+
+  /**
+   * Managed database surfaces and document operations.
+   */
+  readonly databases: DatabasesResource;
+
+  /**
+   * Custom skill management.
+   */
+  readonly skills: SkillsResource;
 
   /**
    * File operations
@@ -360,13 +422,7 @@ export class ComputerAgentsClient {
   readonly git: GitResource;
 
   /**
-   * Run tracking (internal)
-   * @internal
-   */
-  readonly runs: RunsResource;
-
-  /**
-   * Project access (internal - use files for file operations)
+   * Project access (internal - use files/resources/databases for data operations)
    * @internal
    */
   readonly projects: ProjectsResource;
@@ -402,7 +458,16 @@ export class ComputerAgentsClient {
     // Initialize all resource managers
     this.threads = new ThreadsResource(this.api);
     this.environments = new EnvironmentsResource(this.api);
+    this.computers = this.environments;
     this.agents = new AgentsResource(this.api);
+    this.resources = new ResourcesResource(this.api);
+    this.webApps = new WebAppsResource(this.api);
+    this.functions = new FunctionsResource(this.api);
+    this.auth = new AuthResource(this.api);
+    this.runtimes = new AgentRuntimesResource(this.api);
+    this.agentRuntimes = this.runtimes;
+    this.databases = new DatabasesResource(this.api);
+    this.skills = new SkillsResource(this.api);
     this.files = new FilesResource(this.api);
     this.schedules = new SchedulesResource(this.api);
     this.triggers = new TriggersResource(this.api);
@@ -410,7 +475,6 @@ export class ComputerAgentsClient {
     this.budget = new BudgetResource(this.api);
     this.billing = new BillingResource(this.api);
     this.git = new GitResource(this.api);
-    this.runs = new RunsResource(this.api);
     this.projects = new ProjectsResource(this.api);
   }
 
@@ -422,7 +486,7 @@ export class ComputerAgentsClient {
    * Execute a task with automatic thread management
    *
    * This is the simplest way to run an agent task. It handles:
-   * - Auto-creating a default environment (if environmentId not provided)
+   * - Auto-creating a default computer (if no computer/environment ID is provided)
    * - Creating a thread (if threadId not provided)
    * - Sending the message with SSE streaming
    * - Returning the result with thread ID for follow-ups
@@ -451,15 +515,15 @@ export class ComputerAgentsClient {
    *   threadId: result.threadId
    * });
    *
-   * // Explicit environment
+   * // Explicit computer
    * const result = await client.run('Deploy', {
-   *   environmentId: 'env_xxx'
+   *   computerId: 'env_xxx'
    * });
    * ```
    */
   async run(task: string, options: RunOptions = {}): Promise<RunResult> {
     // Auto-resolve environment if not provided
-    const environmentId = options.environmentId || await this._ensureDefaultEnvironment();
+    const environmentId = options.computerId || options.environmentId || await this._ensureDefaultEnvironment();
 
     // Create or reuse thread
     let threadId = options.threadId;
@@ -510,17 +574,17 @@ export class ComputerAgentsClient {
   }
 
   /**
-   * Quick setup with default environment
+   * Quick setup with default computer
    *
-   * Creates a default environment if none exists, returning both
-   * the project and environment ready for execution.
+   * Creates a default computer if none exists, returning both
+   * the project and computer ready for execution.
    *
    * Note: You usually don't need to call this directly. `run()` auto-creates
    * a default environment when `environmentId` is omitted.
    *
    * @example
    * ```typescript
-   * const { project, environment } = await client.quickSetup({
+   * const { project, computer } = await client.quickSetup({
    *   internetAccess: true
    * });
    * ```
@@ -528,9 +592,11 @@ export class ComputerAgentsClient {
   async quickSetup(options: {
     internetAccess?: boolean;
     environmentName?: string;
+    computerName?: string;
   } = {}): Promise<{
     project: Project;
     environment: Environment;
+    computer: Environment;
   }> {
     // Get the project (bound to API key)
     const project = await this.projects.get();
@@ -542,13 +608,13 @@ export class ComputerAgentsClient {
     // Create default environment if none exists
     if (!environment) {
       environment = await this.environments.create({
-        name: options.environmentName || 'default',
+        name: options.computerName || options.environmentName || 'default',
         internetAccess: options.internetAccess ?? true,
         isDefault: true,
       });
     }
 
-    return { project, environment };
+    return { project, environment, computer: environment };
   }
 
   // =========================================================================

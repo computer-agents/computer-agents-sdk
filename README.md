@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/computer-agents.svg?color=success)](https://www.npmjs.com/package/computer-agents)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-Official TypeScript/JavaScript SDK for the [Computer Agents Cloud API](https://computer-agents.com). Execute Claude-powered AI agents in isolated cloud containers.
+Official TypeScript/JavaScript SDK for the [Computer Agents Cloud API](https://computer-agents.com). Build against the Agentic Compute Platform with threads, computers, resources, databases, skills, and agents.
 
 ## Installation
 
@@ -30,12 +30,12 @@ console.log(result.content);
 
 ## Features
 
-- **Claude-powered** — agents run on Claude Opus 4.6, Sonnet 4.5, or Haiku 4.5
-- **Cloud execution** — isolated containers with persistent workspaces
+- **Managed and external models** — use built-in Claude and Gemini models or connect external models on Team and Enterprise plans
+- **Persistent computers** — isolated execution environments with stateful workspaces
 - **SSE streaming** — real-time execution progress and tool calls
 - **Session continuity** — multi-turn conversations via threads
 - **MCP integration** — extend capabilities with Model Context Protocol servers
-- **Skills** — web search, image generation, deep research
+- **Skills and resources** — connect system skills, custom skills, and published resources
 - **Zero dependencies** — uses native `fetch`
 - **Full TypeScript support** — complete type definitions
 
@@ -44,8 +44,12 @@ console.log(result.content);
 | Model | ID | Use Case |
 |-------|-----|----------|
 | Claude 4.6 Opus | `claude-opus-4-6` | Most capable, complex tasks |
-| Claude 4.5 Sonnet | `claude-sonnet-4-5` | Balanced (default) |
+| Claude 4.5 Sonnet | `claude-sonnet-4-5` | Balanced default |
 | Claude 4.5 Haiku | `claude-haiku-4-5` | Fast, efficient |
+| Gemini 3 Flash | `gemini-3-flash` | Low-latency general workflows |
+| Gemini 3.1 Pro | `gemini-3-1-pro` | Broader reasoning and research tasks |
+
+Team and Enterprise plans can also connect external models with IDs in the form `external:{provider}:{model}`.
 
 ## API Reference
 
@@ -65,7 +69,7 @@ const client = new ComputerAgentsClient({
 ```typescript
 // One-shot execution
 const result = await client.run('Fix the TypeScript errors', {
-  environmentId: 'env_xxx'
+  computerId: 'env_xxx'
 });
 
 // With streaming
@@ -85,7 +89,7 @@ Multi-turn conversations with persistent context:
 ```typescript
 // Create a thread
 const thread = await client.threads.create({
-  environmentId: 'env_xxx'
+  computerId: 'env_xxx'
 });
 
 // Send messages — the agent remembers the full context
@@ -134,30 +138,30 @@ const agent = await client.agents.create({
 
 // Use the agent in a thread
 const thread = await client.threads.create({
-  environmentId: 'env_xxx',
+  computerId: 'env_xxx',
   agentId: agent.id
 });
 ```
 
-### Environments
+### Computers
 
-Isolated containers with custom runtimes, packages, and configuration:
+Persistent execution environments with custom runtimes, packages, secrets, and MCP setup:
 
 ```typescript
-// Create an environment
-const env = await client.environments.create({
+// Create a computer (same manager is also available as client.environments)
+const computer = await client.computers.create({
   name: 'python-dev',
   internetAccess: true
 });
 
 // Configure runtimes
-await client.environments.setRuntimes(env.id, {
+await client.computers.setRuntimes(computer.id, {
   python: '3.12',
   nodejs: '20'
 });
 
 // Install packages
-await client.environments.installPackages(env.id, {
+await client.computers.installPackages(computer.id, {
   packages: [
     { type: 'python', name: 'flask' },
     { type: 'python', name: 'pytest' },
@@ -166,7 +170,7 @@ await client.environments.installPackages(env.id, {
 });
 
 // Add MCP servers
-await client.environments.update(env.id, {
+await client.computers.update(computer.id, {
   mcpServers: [
     {
       type: 'stdio',
@@ -184,12 +188,41 @@ await client.environments.update(env.id, {
 });
 
 // Trigger a build
-await client.environments.build(env.id);
+await client.computers.build(computer.id);
+```
+
+### Computer Change History
+
+Inspect file-level workspace history, read diffs, and fork from a historical change:
+
+```typescript
+const history = await client.computers.listChanges(computer.id, {
+  limit: 25,
+  projectId: 'proj_123',
+  operation: ['created', 'modified'],
+});
+
+const latest = history.data[0];
+const latestFile = latest.files[0];
+
+const diff = await client.computers.getChangeDiff(computer.id, latest.id, {
+  path: latestFile.path,
+});
+
+const fileState = await client.computers.getChangeFile(
+  computer.id,
+  latest.id,
+  latestFile.path,
+);
+
+const fork = await client.computers.forkFromChange(computer.id, latest.id, {
+  name: 'history-branch',
+});
 ```
 
 ### Files
 
-Manage files in environment workspaces:
+Manage files in computer workspaces:
 
 ```typescript
 // Upload a file
@@ -209,9 +242,48 @@ const files = await client.files.listFiles('env_xxx');
 await client.files.deleteFile('env_xxx', 'src/app.py');
 ```
 
+### Resources
+
+Publish web apps, functions, auth modules, and agent runtimes:
+
+```typescript
+const resource = await client.resources.create({
+  name: 'crm-web',
+  kind: 'web_app',
+  authMode: 'public',
+});
+
+await client.resources.deploy(resource.id);
+const analytics = await client.resources.getAnalytics(resource.id);
+```
+
+### Databases
+
+Create Firestore-backed data surfaces and work with collections/documents:
+
+```typescript
+const database = await client.databases.create({
+  name: 'crm-data',
+});
+
+await client.databases.createCollection(database.id, { name: 'leads' });
+await client.databases.createDocument(database.id, 'leads', {
+  data: { company: 'Acme', stage: 'new' },
+});
+```
+
+### Skills
+
+Manage custom ACP skills:
+
+```typescript
+const skills = await client.skills.list();
+console.log(skills.map((skill) => skill.name));
+```
+
 ### Git
 
-Version control on workspaces:
+Version control on computer workspaces:
 
 ```typescript
 // View uncommitted changes

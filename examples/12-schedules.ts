@@ -10,34 +10,59 @@
 
 import { ComputerAgentsClient } from 'computer-agents';
 
-const client = new ComputerAgentsClient({
-  apiKey: process.env.COMPUTER_AGENTS_API_KEY,
-});
+async function main() {
+  const client = new ComputerAgentsClient({
+    apiKey: process.env.COMPUTER_AGENTS_API_KEY,
+  });
 
-// Create a schedule that runs daily at 9am UTC
-const schedule = await client.schedules.create({
-  name: 'Daily Code Review',
-  type: 'cron',
-  cronExpression: '0 9 * * *',
-  task: 'Review all uncommitted changes and write a summary of what changed',
-  environmentId: process.env.ENVIRONMENT_ID || 'env_xxx',
-});
+  const environmentId = process.env.ENVIRONMENT_ID || 'env_xxx';
+  const environmentName = process.env.ENVIRONMENT_NAME || 'primary-computer';
+  const existingAgentId = process.env.AGENT_ID;
 
-console.log(`Schedule created: ${schedule.id}`);
-console.log(`  Name: ${schedule.name}`);
-console.log(`  Cron: ${schedule.cronExpression}`);
+  const agent = existingAgentId
+    ? await client.agents.get(existingAgentId)
+    : await client.agents.create({
+        name: 'Daily Code Review Agent',
+        model: 'claude-haiku-4-5',
+        instructions: 'Review recent code changes and produce a concise operator summary.',
+      });
 
-// List all schedules
-const schedules = await client.schedules.list();
-console.log(`\nAll schedules (${schedules.length}):`);
-for (const s of schedules) {
-  console.log(`  - ${s.name} (${s.cronExpression})`);
+  // Create a recurring schedule that runs on weekdays at 9am UTC
+  const schedule = await client.schedules.create({
+    name: 'Daily Code Review',
+    description: 'Weekday review of code changes and outstanding risks.',
+    agentId: agent.id,
+    agentName: agent.name,
+    task: 'Review all uncommitted changes and write a summary of what changed.',
+    environmentId,
+    environmentName,
+    scheduleType: 'recurring',
+    cronExpression: '0 9 * * 1-5',
+    timezone: 'UTC',
+    enabled: true,
+  });
+
+  console.log(`Schedule created: ${schedule.id}`);
+  console.log(`  Name: ${schedule.name}`);
+  console.log(`  Cron: ${schedule.cronExpression}`);
+
+  // List all schedules
+  const schedules = await client.schedules.list();
+  console.log(`\nAll schedules (${schedules.length}):`);
+  for (const s of schedules) {
+    console.log(`  - ${s.name} (${s.cronExpression})`);
+  }
+
+  // Trigger a schedule manually
+  await client.schedules.trigger(schedule.id);
+  console.log(`\nManually triggered: ${schedule.name}`);
+
+  // Disable a schedule
+  await client.schedules.disable(schedule.id);
+  console.log(`Disabled: ${schedule.name}`);
 }
 
-// Trigger a schedule manually
-await client.schedules.trigger(schedule.id);
-console.log(`\nManually triggered: ${schedule.name}`);
-
-// Disable a schedule
-await client.schedules.disable(schedule.id);
-console.log(`Disabled: ${schedule.name}`);
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

@@ -72,6 +72,28 @@ export interface SendMessageResult {
   events: MessageStreamEvent[];
 }
 
+export interface ThreadStatusResult {
+  id?: string;
+  threadId: string;
+  status: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  duration?: string | null;
+  updatedAt?: string;
+}
+
+export interface ThreadStep {
+  id: string;
+  threadId?: string;
+  sequence?: number;
+  title?: string | null;
+  eventType?: string | null;
+  snapshotBeforeId?: string | null;
+  snapshotAfterId?: string | null;
+  createdAt?: string;
+  metadata?: Record<string, unknown> | null;
+}
+
 export class ThreadsResource {
   constructor(private readonly client: ApiClient) {}
 
@@ -345,6 +367,141 @@ export class ThreadsResource {
       `/threads/${threadId}/logs`
     );
     return response.logs;
+  }
+
+  /**
+   * Get execution status for a thread.
+   */
+  async getStatus(threadId: string): Promise<ThreadStatusResult> {
+    return this.client.get(`/threads/${threadId}/status`);
+  }
+
+  /**
+   * List timeline steps for a thread.
+   */
+  async listSteps(
+    threadId: string,
+    params: { limit?: number; offset?: number } = {},
+  ): Promise<ThreadStep[]> {
+    const response = await this.client.get<{ data: ThreadStep[] }>(`/threads/${threadId}/steps`, params);
+    return response.data;
+  }
+
+  async listStepFiles(
+    threadId: string,
+    stepId: string,
+    params: { prefix?: string } = {},
+  ): Promise<Array<Record<string, unknown>>> {
+    const response = await this.client.get<{ data: Array<Record<string, unknown>> }>(
+      `/threads/${threadId}/steps/${stepId}/files`,
+      params,
+    );
+    return response.data;
+  }
+
+  async getStepDiff(
+    threadId: string,
+    stepId: string,
+    params: { path?: string } = {},
+  ): Promise<Record<string, unknown>> {
+    return this.client.get(`/threads/${threadId}/steps/${stepId}/diff`, params);
+  }
+
+  async getStepFile(threadId: string, stepId: string, path: string): Promise<{
+    path: string;
+    snapshotId?: string | null;
+    stepId: string;
+    content: string;
+  }> {
+    return this.client.get(`/threads/${threadId}/steps/${stepId}/file`, { path });
+  }
+
+  async downloadStepFile(threadId: string, stepId: string, path: string): Promise<Buffer> {
+    const response = await this.client.request<Response>(
+      'GET',
+      `/threads/${threadId}/steps/${stepId}/file/download`,
+      {
+        query: { path },
+        stream: true,
+      },
+    );
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  }
+
+  async forkFromStep(
+    threadId: string,
+    stepId: string,
+    params: { mode?: 'historical' | 'latest'; title?: string | null; environmentName?: string | null } = {},
+  ): Promise<Record<string, unknown>> {
+    return this.client.post(`/threads/${threadId}/steps/${stepId}/fork`, params);
+  }
+
+  async revertToStep(
+    threadId: string,
+    stepId: string,
+    params: {
+      historyActionType?: 'revert' | 'reapply';
+      revertedChangeStepId?: string | null;
+      revertedFilePath?: string | null;
+      revertedFileName?: string | null;
+    } = {},
+  ): Promise<Record<string, unknown>> {
+    return this.client.post(`/threads/${threadId}/steps/${stepId}/revert`, params);
+  }
+
+  async getFileHistory(
+    threadId: string,
+    path: string,
+    params: { limit?: number; offset?: number } = {},
+  ): Promise<{
+    data: Array<Record<string, unknown>>;
+    total: number;
+    hasMore: boolean;
+  }> {
+    const response = await this.client.get<{
+      data: Array<Record<string, unknown>>;
+      total_count: number;
+      has_more: boolean;
+    }>(`/threads/${threadId}/files/history`, { path, ...params });
+    return {
+      data: response.data,
+      total: response.total_count,
+      hasMore: response.has_more,
+    };
+  }
+
+  async forkFromMessage(threadId: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.client.post(`/threads/${threadId}/fork-from-message`, params);
+  }
+
+  async getContextEstimate(threadId: string): Promise<Record<string, unknown>> {
+    return this.client.get(`/threads/${threadId}/context`);
+  }
+
+  async getContextDetails(threadId: string): Promise<Record<string, unknown>> {
+    return this.client.get(`/threads/${threadId}/context/details`);
+  }
+
+  async runContextAction(
+    threadId: string,
+    params: { action: 'compact' | 'clear' | 'fork' | 'btw'; prompt?: string | null; title?: string | null },
+  ): Promise<Record<string, unknown>> {
+    return this.client.post(`/threads/${threadId}/context/actions`, params);
+  }
+
+  async generateTitle(
+    threadId: string,
+    params: { message: string; content?: string; task?: string; force?: boolean },
+  ): Promise<Record<string, unknown>> {
+    return this.client.post(`/threads/${threadId}/generate-title`, params);
+  }
+
+  async getDiffs(threadId: string): Promise<Array<Record<string, unknown>>> {
+    const response = await this.client.get<{ diffs?: Array<Record<string, unknown>>; data?: Array<Record<string, unknown>> }>(
+      `/threads/${threadId}/diffs`,
+    );
+    return response.diffs ?? response.data ?? [];
   }
 
   /**

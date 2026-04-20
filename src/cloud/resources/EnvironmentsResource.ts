@@ -27,6 +27,13 @@ import type {
   InstallPackagesResult,
   DockerfileResult,
   ValidateDockerfileResult,
+  EnvironmentSnapshot,
+  EnvironmentChangeListResponse,
+  EnvironmentChangeOperation,
+  EnvironmentSnapshotDiffResponse,
+  EnvironmentSnapshotFileResponse,
+  EnvironmentForkFromSnapshotResponse,
+  SnapshotFileEntry,
 } from '../types';
 
 export interface ListEnvironmentsParams {
@@ -36,6 +43,38 @@ export interface ListEnvironmentsParams {
   offset?: number;
 }
 
+export interface EnvironmentAnalyticsResponse {
+  environmentId: string;
+  available?: boolean;
+  summary?: Record<string, unknown>;
+  charts?: Record<string, unknown>;
+  recentRuns?: Array<Record<string, unknown>>;
+}
+
+export interface EnvironmentSecretDescriptor {
+  key: string;
+  hasValue: boolean;
+}
+
+export interface EnvironmentGuiActionParams {
+  action: 'click' | 'double_click' | 'right_click' | 'scroll' | 'key' | 'type' | 'bootstrap' | 'launch_app';
+  x?: number;
+  y?: number;
+  deltaY?: number;
+  steps?: number;
+  key?: string;
+  text?: string;
+  app?: string;
+}
+
+export interface ListEnvironmentChangesParams {
+  limit?: number;
+  offset?: number;
+  projectId?: string;
+  agentId?: string;
+  operation?: EnvironmentChangeOperation | EnvironmentChangeOperation[];
+}
+
 export class EnvironmentsResource {
   constructor(private readonly client: ApiClient) {}
 
@@ -43,6 +82,8 @@ export class EnvironmentsResource {
    * Create a new environment
    *
    * User is determined automatically from the API key.
+   * Use `computeProfile` for first-class sizing presets such as
+   * `lite`, `standard`, `power`, and `desktop`.
    */
   async create(params: CreateEnvironmentParams): Promise<Environment> {
     const response = await this.client.post<{ environment: Environment }>(
@@ -93,7 +134,20 @@ export class EnvironmentsResource {
   }
 
   /**
+   * Mark an environment as the default computer for the current user.
+   */
+  async setDefault(environmentId: string): Promise<Environment> {
+    const response = await this.client.post<{ environment: Environment }>(
+      `/environments/${environmentId}/set-default`,
+      {},
+    );
+    return response.environment;
+  }
+
+  /**
    * Update an environment
+   *
+   * `computeProfile` is the recommended way to change computer sizing.
    */
   async update(
     environmentId: string,
@@ -373,6 +427,188 @@ export class EnvironmentsResource {
       `/environments/${environmentId}/status`
     );
     return response;
+  }
+
+  /**
+   * Get runtime analytics for the computer.
+   */
+  async getAnalytics(environmentId: string): Promise<EnvironmentAnalyticsResponse> {
+    return this.client.get(`/environments/${environmentId}/analytics`);
+  }
+
+  /**
+   * Capture a desktop screenshot from the computer.
+   */
+  async captureScreenshot(environmentId: string): Promise<Buffer> {
+    const response = await this.client.request<Response>(
+      'GET',
+      `/environments/${environmentId}/gui/screenshot`,
+      { stream: true },
+    );
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  }
+
+  /**
+   * Create a browser/desktop session token for GUI streaming.
+   */
+  async createGuiSession(environmentId: string): Promise<{
+    token: string;
+    websocketPath: string;
+    expiresAt: string;
+  }> {
+    return this.client.post(`/environments/${environmentId}/gui/session`, {});
+  }
+
+  /**
+   * Execute a GUI action in the computer session.
+   */
+  async performGuiAction(
+    environmentId: string,
+    params: EnvironmentGuiActionParams,
+  ): Promise<{ ok: boolean; action: string }> {
+    return this.client.post(`/environments/${environmentId}/gui/action`, params);
+  }
+
+  /**
+   * List configured secret keys for the computer.
+   */
+  async listSecrets(environmentId: string): Promise<EnvironmentSecretDescriptor[]> {
+    const response = await this.client.get<{ data: EnvironmentSecretDescriptor[] }>(
+      `/environments/${environmentId}/secrets`,
+    );
+    return response.data;
+  }
+
+  async createSecret(environmentId: string, key: string, value: string): Promise<{ success?: boolean; key: string; message?: string }> {
+    return this.client.post(`/environments/${environmentId}/secrets`, { key, value });
+  }
+
+  async updateSecret(environmentId: string, key: string, value: string): Promise<{ success?: boolean; key: string; message?: string }> {
+    return this.client.put(`/environments/${environmentId}/secrets/${encodeURIComponent(key)}`, { value });
+  }
+
+  async deleteSecret(environmentId: string, key: string): Promise<{ success?: boolean; key: string; message?: string }> {
+    return this.client.delete(`/environments/${environmentId}/secrets/${encodeURIComponent(key)}`);
+  }
+
+  /**
+   * Initialize snapshot history for a computer.
+   */
+  async initializeSnapshots(environmentId: string): Promise<{
+    environmentId: string;
+    snapshot: EnvironmentSnapshot;
+  }> {
+    return this.client.post(`/environments/${environmentId}/snapshots/initialize`, {});
+  }
+
+  /**
+   * List checkpoint snapshots for a computer.
+   */
+  async listSnapshots(environmentId: string): Promise<EnvironmentSnapshot[]> {
+    const response = await this.client.get<{ data: EnvironmentSnapshot[] }>(`/environments/${environmentId}/snapshots`);
+    return response.data;
+  }
+
+  /**
+   * List file-level computer changes over time.
+   *
+   * This is the canonical environment history surface for “what changed when”.
+   * Results are paginated and can be filtered by project, agent, and operation.
+   */
+  async listChanges(
+    environmentId: string,
+    params: ListEnvironmentChangesParams = {},
+  ): Promise<EnvironmentChangeListResponse> {
+    const query: Record<string, string | number | boolean | undefined> = {
+      limit: params.limit,
+      offset: params.offset,
+      projectId: params.projectId,
+      agentId: params.agentId,
+      operation: Array.isArray(params.operation) ? params.operation.join(',') : params.operation,
+    };
+    return this.client.get<EnvironmentChangeListResponse>(
+      `/environments/${environmentId}/changes`,
+      query,
+    );
+  }
+
+  async listSnapshotFiles(
+    environmentId: string,
+    snapshotId: string,
+    params: { prefix?: string } = {},
+  ): Promise<SnapshotFileEntry[]> {
+    const response = await this.client.get<{ data: SnapshotFileEntry[] }>(
+      `/environments/${environmentId}/snapshots/${snapshotId}/files`,
+      params,
+    );
+    return response.data;
+  }
+
+  async getSnapshotDiff(
+    environmentId: string,
+    snapshotId: string,
+    params: { path?: string } = {},
+  ): Promise<EnvironmentSnapshotDiffResponse> {
+    return this.client.get<EnvironmentSnapshotDiffResponse>(`/environments/${environmentId}/snapshots/${snapshotId}/diff`, params);
+  }
+
+  async getSnapshotFile(
+    environmentId: string,
+    snapshotId: string,
+    path: string,
+  ): Promise<EnvironmentSnapshotFileResponse> {
+    return this.client.get<EnvironmentSnapshotFileResponse>(`/environments/${environmentId}/snapshots/${snapshotId}/file`, { path });
+  }
+
+  /**
+   * Read the diff for one historical file-level computer change.
+   */
+  async getChangeDiff(
+    environmentId: string,
+    changeId: string,
+    params: { path?: string } = {},
+  ): Promise<EnvironmentSnapshotDiffResponse> {
+    return this.client.get<EnvironmentSnapshotDiffResponse>(
+      `/environments/${environmentId}/changes/${encodeURIComponent(changeId)}/diff`,
+      params,
+    );
+  }
+
+  /**
+   * Read one file as it existed at a specific change boundary.
+   */
+  async getChangeFile(
+    environmentId: string,
+    changeId: string,
+    path: string,
+  ): Promise<EnvironmentSnapshotFileResponse> {
+    return this.client.get<EnvironmentSnapshotFileResponse>(
+      `/environments/${environmentId}/changes/${encodeURIComponent(changeId)}/file`,
+      { path },
+    );
+  }
+
+  async forkFromSnapshot(
+    environmentId: string,
+    snapshotId: string,
+    params: { name?: string; description?: string } = {},
+  ): Promise<EnvironmentForkFromSnapshotResponse> {
+    return this.client.post<EnvironmentForkFromSnapshotResponse>(`/environments/${environmentId}/snapshots/${snapshotId}/fork`, params);
+  }
+
+  /**
+   * Fork a new computer from a specific historical file change.
+   */
+  async forkFromChange(
+    environmentId: string,
+    changeId: string,
+    params: { name?: string; description?: string } = {},
+  ): Promise<EnvironmentForkFromSnapshotResponse> {
+    return this.client.post<EnvironmentForkFromSnapshotResponse>(
+      `/environments/${environmentId}/changes/${encodeURIComponent(changeId)}/fork`,
+      params,
+    );
   }
 
   // =========================================================================
