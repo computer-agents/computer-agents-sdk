@@ -169,7 +169,7 @@ export class FilesResource {
 
     const response = await this.client.request<Response>(
       'GET',
-      `/environments/${environmentId}/files/${encodedPath}`,
+      `/environments/${environmentId}/files/download/${encodedPath}`,
       { stream: true }
     );
 
@@ -192,12 +192,23 @@ export class FilesResource {
 
     const response = await this.client.request<Response>(
       'GET',
-      `/environments/${environmentId}/files/${encodedPath}`,
+      `/environments/${environmentId}/files/download/${encodedPath}`,
       { stream: true }
     );
 
     const arrayBuffer = await response.arrayBuffer();
     return Buffer.from(arrayBuffer);
+  }
+
+  /**
+   * Download a directory as a zip archive.
+   *
+   * @param environmentId - The environment ID
+   * @param folderPath - Path to the directory
+   * @returns Zip archive bytes
+   */
+  async downloadDirectory(environmentId: string, folderPath: string): Promise<Buffer> {
+    return this.downloadFile(environmentId, folderPath);
   }
 
   /**

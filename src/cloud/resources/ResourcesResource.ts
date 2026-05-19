@@ -4,7 +4,10 @@ import type {
   Resource,
   ResourceAnalyticsResponse,
   ResourceBinding,
+  ResourceBindingTargetType,
+  ResourceDeployment,
   ResourceLogEntry,
+  ResourceSecret,
   UpdateResourceParams,
 } from '../types';
 
@@ -92,8 +95,28 @@ export class ResourcesResource {
     invocationUrl?: string | null;
     revision?: string | null;
     deploymentType?: string | null;
+    deployment?: ResourceDeployment;
   }> {
     return this.client.post(`/servers/${serverId}/deploy`, {});
+  }
+
+  async listDeployments(serverId: string): Promise<ResourceDeployment[]> {
+    const response = await this.client.get<{
+      deployments?: ResourceDeployment[];
+      data?: ResourceDeployment[];
+    }>(`/servers/${serverId}/deployments`);
+    return response.deployments ?? response.data ?? [];
+  }
+
+  async rollbackDeployment(
+    serverId: string,
+    params: { deploymentId?: string; revision?: string } = {},
+  ): Promise<{
+    server?: Resource;
+    deployment?: ResourceDeployment;
+    activeDeployment?: ResourceDeployment;
+  }> {
+    return this.client.post(`/servers/${serverId}/rollback`, params);
   }
 
   async invoke(serverId: string, params: ResourceInvokeParams = {}): Promise<{
@@ -130,7 +153,7 @@ export class ResourcesResource {
 
   async upsertBinding(
     serverId: string,
-    targetType: 'database' | 'auth' | 'agent_runtime',
+    targetType: ResourceBindingTargetType,
     params: { targetId: string; alias?: string; metadata?: Record<string, unknown> | null },
   ): Promise<ResourceBinding[]> {
     const response = await this.client.put<{ bindings: ResourceBinding[] }>(
@@ -142,7 +165,7 @@ export class ResourcesResource {
 
   async deleteBinding(
     serverId: string,
-    targetType: 'database' | 'auth' | 'agent_runtime',
+    targetType: ResourceBindingTargetType,
   ): Promise<ResourceBinding[]> {
     const response = await this.client.delete<{ bindings: ResourceBinding[] }>(
       `/servers/${serverId}/bindings/${targetType}`,
@@ -269,5 +292,39 @@ export class ResourcesResource {
       .map(encodeURIComponent)
       .join('/');
     return this.client.delete(`/servers/${serverId}/files/${encodedPath}`);
+  }
+
+  async listSecrets(serverId: string): Promise<ResourceSecret[]> {
+    const response = await this.client.get<{ secrets?: ResourceSecret[]; data?: ResourceSecret[] }>(
+      `/servers/${serverId}/secrets`,
+    );
+    return response.secrets ?? response.data ?? [];
+  }
+
+  async getSecret(serverId: string, secretId: string): Promise<ResourceSecret> {
+    const response = await this.client.get<{ secret: ResourceSecret }>(`/servers/${serverId}/secrets/${secretId}`);
+    return response.secret;
+  }
+
+  async createSecret(
+    serverId: string,
+    params: { name: string; value: string; description?: string; metadata?: Record<string, unknown> | null },
+  ): Promise<ResourceSecret> {
+    const response = await this.client.post<{ secret: ResourceSecret }>(`/servers/${serverId}/secrets`, params);
+    return response.secret;
+  }
+
+  async updateSecret(
+    serverId: string,
+    secretId: string,
+    params: { name?: string; value?: string; description?: string; metadata?: Record<string, unknown> | null },
+  ): Promise<ResourceSecret> {
+    const response = await this.client.put<{ secret: ResourceSecret }>(`/servers/${serverId}/secrets/${secretId}`, params);
+    return response.secret;
+  }
+
+  async deleteSecret(serverId: string, secretId: string): Promise<boolean> {
+    const response = await this.client.delete<{ deleted?: boolean }>(`/servers/${serverId}/secrets/${secretId}`);
+    return !!response?.deleted;
   }
 }

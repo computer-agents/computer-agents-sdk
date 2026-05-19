@@ -1,9 +1,12 @@
 {
   "name": "computer-agents",
-  "repository": "https://github.com/computer-agents/computer-agents-sdk",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/computer-agents/computer-agents-sdk.git"
+  },
   "homepage": "https://computer-agents.com",
-  "version": "2.6.1",
-  "description": "Official SDK for the Computer Agents Agentic Compute Platform API. Build with threads, computers, agents, resources, and databases.",
+  "version": "2.6.3",
+  "description": "Official TypeScript SDK for Computer Agents. Run agents, manage cloud computers and projects, and deploy web apps, functions, databases, auth, runtimes, and secrets.",
   "author": "Computer Agents",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -17,6 +20,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./runtime/server": {
+      "types": "./dist/runtime/server.d.ts",
+      "default": "./dist/runtime/server.js"
     }
   },
   "keywords": [

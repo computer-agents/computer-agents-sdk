@@ -22,6 +22,13 @@ import type {
   SearchThreadsResponse,
   ThreadLogEntry,
   ResearchSession,
+  ThreadFeedbackRating,
+  ThreadFeedbackReport,
+  ThreadFeedbackReportCreate,
+  ThreadFeedbackSummary,
+  ThreadPermissionDecisionParams,
+  ThreadPermissionDecisionResponse,
+  ThreadPermissionRequest,
 } from '../types';
 
 /**
@@ -502,6 +509,80 @@ export class ThreadsResource {
       `/threads/${threadId}/diffs`,
     );
     return response.diffs ?? response.data ?? [];
+  }
+
+  /**
+   * Get aggregated thumbs up/down feedback for a thread.
+   */
+  async getFeedback(threadId: string): Promise<ThreadFeedbackSummary> {
+    return this.client.get(`/threads/${threadId}/feedback`);
+  }
+
+  /**
+   * Store the current user's thumbs up/down feedback for a thread.
+   */
+  async setFeedback(threadId: string, rating: ThreadFeedbackRating): Promise<ThreadFeedbackSummary> {
+    return this.client.post(`/threads/${threadId}/feedback`, { rating });
+  }
+
+  /**
+   * Report qualitative feedback or an issue for a thread.
+   */
+  async reportIssue(threadId: string, params: ThreadFeedbackReportCreate): Promise<ThreadFeedbackReport> {
+    return this.client.post(`/threads/${threadId}/feedback/report`, params);
+  }
+
+  /**
+   * Alias for reportIssue().
+   */
+  async reportFeedback(threadId: string, params: ThreadFeedbackReportCreate): Promise<ThreadFeedbackReport> {
+    return this.reportIssue(threadId, params);
+  }
+
+  /**
+   * List pending runtime permission requests for a thread.
+   */
+  async listPermissionRequests(threadId: string): Promise<ThreadPermissionRequest[]> {
+    const response = await this.client.get<{ data: ThreadPermissionRequest[] }>(
+      `/threads/${threadId}/permission-requests`,
+    );
+    return response.data;
+  }
+
+  /**
+   * Approve or deny a runtime permission request.
+   */
+  async decidePermissionRequest(
+    threadId: string,
+    requestId: string,
+    params: ThreadPermissionDecisionParams,
+  ): Promise<ThreadPermissionDecisionResponse> {
+    return this.client.post(
+      `/threads/${threadId}/permission-requests/${requestId}/decision`,
+      params,
+    );
+  }
+
+  /**
+   * Approve a runtime permission request.
+   */
+  async approvePermissionRequest(
+    threadId: string,
+    requestId: string,
+    reason?: string,
+  ): Promise<ThreadPermissionDecisionResponse> {
+    return this.decidePermissionRequest(threadId, requestId, { decision: 'allow', reason });
+  }
+
+  /**
+   * Deny a runtime permission request.
+   */
+  async denyPermissionRequest(
+    threadId: string,
+    requestId: string,
+    reason?: string,
+  ): Promise<ThreadPermissionDecisionResponse> {
+    return this.decidePermissionRequest(threadId, requestId, { decision: 'deny', reason });
   }
 
   /**

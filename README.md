@@ -1,428 +1,360 @@
-# Computer Agents SDK
+# Computer Agents JavaScript SDK
 
 [![npm version](https://img.shields.io/npm/v/computer-agents.svg?color=success)](https://www.npmjs.com/package/computer-agents)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-Official TypeScript/JavaScript SDK for the [Computer Agents Cloud API](https://computer-agents.com). Build against the Agentic Compute Platform with threads, computers, resources, databases, skills, and agents.
+Official TypeScript/JavaScript SDK for [Computer Agents](https://computer-agents.com), the Agentic Compute Platform.
 
-## Installation
+Computer Agents gives AI agents the things a real teammate needs to finish work: persistent cloud computers, files, project plans, tasks, memory, skills, scheduled work, and deployable resources. Use this SDK to start agents, stream their work, manage projects and computers, deploy web apps and functions, store data, connect auth, and keep secrets out of source code.
+
+## What You Can Build
+
+- **Agentic product workspaces** with projects, releases, tickets, reviewers, comments, and task-linked threads.
+- **Persistent cloud computers** where agents can browse, code, run CLIs, install packages, edit files, and keep state across sessions.
+- **Hosted products and internal tools** with Web Apps, Functions, Databases, Auth, Agent Runtimes, and Secrets.
+- **Automated research and operations** with threads, schedules, triggers, skills, and reusable custom agents.
+- **Apps built on Computer Agents** where your product calls the same platform API that powers the web platform.
+
+## Install
 
 ```bash
 npm install computer-agents
 ```
 
-## Quick Start
+Node.js 18 or newer is required.
 
-```typescript
+## Authenticate
+
+Create an API key in Computer Agents, then set:
+
+```bash
+export COMPUTER_AGENTS_API_KEY="ca_..."
+```
+
+```ts
 import { ComputerAgentsClient } from 'computer-agents';
 
 const client = new ComputerAgentsClient({
-  apiKey: process.env.COMPUTER_AGENTS_API_KEY
+  apiKey: process.env.COMPUTER_AGENTS_API_KEY,
 });
-
-// Execute a task
-const result = await client.run('Create a REST API with Flask', {
-  onEvent: (event) => console.log(event.type)
-});
-
-console.log(result.content);
 ```
 
-## Features
+You can also pass `baseUrl` when targeting a custom deployment.
 
-- **Managed and external models** — use built-in Claude and Gemini models or connect external models on Team and Enterprise plans
-- **Persistent computers** — isolated execution environments with stateful workspaces
-- **SSE streaming** — real-time execution progress and tool calls
-- **Session continuity** — multi-turn conversations via threads
-- **MCP integration** — extend capabilities with Model Context Protocol servers
-- **Skills and resources** — connect system skills, custom skills, and published resources
-- **Zero dependencies** — uses native `fetch`
-- **Full TypeScript support** — complete type definitions
+## Quick Start
 
-## Supported Models
+Run a task and stream the agent's work:
 
-| Model | ID | Use Case |
-|-------|-----|----------|
-| Claude 4.6 Opus | `claude-opus-4-6` | Most capable, complex tasks |
-| Claude 4.5 Sonnet | `claude-sonnet-4-5` | Balanced default |
-| Claude 4.5 Haiku | `claude-haiku-4-5` | Fast, efficient |
-| Gemini 3 Flash | `gemini-3-flash` | Low-latency general workflows |
-| Gemini 3.1 Pro | `gemini-3-1-pro` | Broader reasoning and research tasks |
+```ts
+import { ComputerAgentsClient } from 'computer-agents';
 
-Team and Enterprise plans can also connect external models with IDs in the form `external:{provider}:{model}`.
-
-## API Reference
-
-### Client
-
-```typescript
 const client = new ComputerAgentsClient({
-  apiKey: 'your-api-key',                         // Required
-  baseUrl: 'https://api.computer-agents.com',     // Optional (default)
-  timeout: 60000,                                  // Optional (default: 60s)
-  debug: false                                     // Optional
-});
-```
-
-### Running Tasks
-
-```typescript
-// One-shot execution
-const result = await client.run('Fix the TypeScript errors', {
-  computerId: 'env_xxx'
+  apiKey: process.env.COMPUTER_AGENTS_API_KEY,
 });
 
-// With streaming
-const result = await client.run('Build a REST API', {
+const result = await client.run('Create a small Next.js dashboard and explain how to run it.', {
   onEvent: (event) => {
     if (event.type === 'response.item.completed') {
       console.log(event);
     }
-  }
+  },
 });
+
+console.log(result.content);
+console.log(result.threadId);
 ```
 
-### Threads
+## Core Concepts
 
-Multi-turn conversations with persistent context:
+| Concept | What it means |
+| --- | --- |
+| **Threads** | Multi-turn agent sessions with messages, logs, reasoning, diffs, permission requests, feedback, and resumable state. |
+| **Computers** | Persistent cloud workspaces with files, runtimes, packages, GUI access, Git, snapshots, and deployment context. |
+| **Projects** | Shared workspaces for complex work: strategy, releases, tasks, comments, resources, review state, and task-linked threads. |
+| **Agents** | Reusable agent profiles with model, instructions, skills, reasoning effort, and analytics. |
+| **Resources** | Deployable product surfaces: Web Apps, Functions, Databases, Auth, Agent Runtimes, and Secrets. |
+| **Skills** | Reusable capabilities agents can invoke, such as research, image generation, app deployment, or task management. |
 
-```typescript
-// Create a thread
-const thread = await client.threads.create({
-  computerId: 'env_xxx'
-});
+## Persistent Computers and Threads
 
-// Send messages — the agent remembers the full context
-await client.threads.sendMessage(thread.id, {
-  content: 'Create a Python web server',
-  onEvent: (event) => console.log(event)
-});
+Create a computer, start a thread inside it, and continue later with the same files and state:
 
-await client.threads.sendMessage(thread.id, {
-  content: 'Add authentication to it',
-  onEvent: (event) => console.log(event)
-});
-
-// Copy a thread to fork the conversation
-const copy = await client.threads.copy(thread.id, {
-  title: 'Experiment v2'
-});
-
-// Search across threads
-const results = await client.threads.search({
-  query: 'REST API',
-  limit: 10
-});
-
-// Get execution logs
-const logs = await client.threads.getLogs(thread.id);
-
-// List, get, update, delete
-const threads = await client.threads.list();
-const t = await client.threads.get('thread_xxx');
-await client.threads.update('thread_xxx', { title: 'New title' });
-await client.threads.delete('thread_xxx');
-```
-
-### Agents
-
-Configure agent behavior with specific models and instructions:
-
-```typescript
-const agent = await client.agents.create({
-  name: 'Senior Developer',
-  model: 'claude-sonnet-4-5',
-  instructions: 'You are a senior developer. Write clean, tested code.',
-  reasoningEffort: 'high'
-});
-
-// Use the agent in a thread
-const thread = await client.threads.create({
-  computerId: 'env_xxx',
-  agentId: agent.id
-});
-```
-
-### Computers
-
-Persistent execution environments with custom runtimes, packages, secrets, and MCP setup:
-
-```typescript
-// Create a computer (same manager is also available as client.environments)
+```ts
 const computer = await client.computers.create({
-  name: 'python-dev',
-  internetAccess: true
+  name: 'product-build-computer',
+  internetAccess: true,
 });
 
-// Configure runtimes
-await client.computers.setRuntimes(computer.id, {
-  python: '3.12',
-  nodejs: '20'
+const thread = await client.threads.create({
+  computerId: computer.id,
 });
 
-// Install packages
-await client.computers.installPackages(computer.id, {
-  packages: [
-    { type: 'python', name: 'flask' },
-    { type: 'python', name: 'pytest' },
-    { type: 'system', name: 'curl' }
-  ]
+await client.threads.sendMessage(thread.id, {
+  content: 'Create a Node.js API with a health route.',
+  onEvent: (event) => console.log(event.type),
 });
 
-// Add MCP servers
-await client.computers.update(computer.id, {
-  mcpServers: [
-    {
-      type: 'stdio',
-      name: 'filesystem',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-filesystem', '/workspace']
-    },
-    {
-      type: 'http',
-      name: 'notion',
-      url: 'https://mcp.notion.com/mcp',
-      bearerToken: process.env.NOTION_TOKEN
-    }
-  ]
+await client.threads.sendMessage(thread.id, {
+  content: 'Now add authentication and tests.',
 });
 
-// Trigger a build
-await client.computers.build(computer.id);
+const logs = await client.threads.getLogs(thread.id);
+const diffs = await client.threads.getDiffs(thread.id);
 ```
 
-### Computer Change History
+Thread methods include `create`, `list`, `get`, `sendMessage`, `cancel`, `resume`, `copy`, `search`, `getMessages`, `getLogs`, `getStatus`, `getDiffs`, `listSteps`, `downloadStepFile`, `forkFromStep`, `revertToStep`, `setFeedback`, `reportIssue`, and permission request approval/denial.
 
-Inspect file-level workspace history, read diffs, and fork from a historical change:
+## Projects and Tasks
 
-```typescript
-const history = await client.computers.listChanges(computer.id, {
-  limit: 25,
-  projectId: 'proj_123',
-  operation: ['created', 'modified'],
+Use projects when agents need the same context a human team would need: the goal, current release, backlog, comments, dependencies, resources, and review policy.
+
+```ts
+const project = await client.projects.create({
+  name: 'Customer Portal',
+  description: 'Build and deploy an authenticated customer portal.',
 });
 
-const latest = history.data[0];
-const latestFile = latest.files[0];
-
-const diff = await client.computers.getChangeDiff(computer.id, latest.id, {
-  path: latestFile.path,
+const release = await client.tasks.createRelease({
+  projectId: project.id,
+  name: 'v0.1 MVP',
 });
 
-const fileState = await client.computers.getChangeFile(
-  computer.id,
-  latest.id,
-  latestFile.path,
-);
+const task = await client.tasks.create({
+  projectId: project.id,
+  releaseId: release.id,
+  title: 'Deploy login and account settings',
+  status: 'todo',
+  priority: 'high',
+});
 
-const fork = await client.computers.forkFromChange(computer.id, latest.id, {
-  name: 'history-branch',
+await client.tasks.createComment(task.id, {
+  body: 'Include password reset and session validation.',
+});
+
+await client.tasks.startThread(task.id, {
+  environmentId: computer.id,
 });
 ```
 
-### Files
+## Deployable Server Resources
 
-Manage files in computer workspaces:
+Computer Agents resources let humans and agents ship software from the same workspace where the work is planned and built.
 
-```typescript
-// Upload a file
+| Manager | Resource kind | Typical use |
+| --- | --- | --- |
+| `client.webApps` | `web_app` | Dashboards, internal tools, portals, prototypes, AI apps. |
+| `client.functions` | `function` | APIs, webhooks, jobs, data transforms, backend actions. |
+| `client.databases` | Database | Collections and JSON documents for apps, functions, and agents. |
+| `client.auth` | `auth` | Sign-up, sign-in, sessions, protected app workflows. |
+| `client.runtimes` | `agent_runtime` | Always-on agent APIs and embedded agent services. |
+| `client.secrets` | `secrets` | Secret vaults for API keys, tokens, credentials, and private config. |
+| `client.resources` | Generic resources | Cross-kind automation when one workflow handles multiple resource types. |
+
+### Create and Deploy a Function
+
+Upload source code from a computer, create the Function, deploy it, then invoke it.
+
+```ts
 await client.files.uploadFile({
-  environmentId: 'env_xxx',
-  path: 'src/app.py',
-  content: 'print("hello")'
+  environmentId: computer.id,
+  path: 'functions/hello-world',
+  filename: 'index.mjs',
+  content: `
+export default async function handler(request) {
+  return Response.json({ message: 'Hello from Computer Agents Functions' });
+}
+`,
+  contentType: 'text/javascript',
 });
 
-// Download file content
-const content = await client.files.getFile('env_xxx', 'src/app.py');
-
-// List files
-const files = await client.files.listFiles('env_xxx');
-
-// Delete a file
-await client.files.deleteFile('env_xxx', 'src/app.py');
-```
-
-### Resources
-
-Publish web apps, functions, auth modules, and agent runtimes:
-
-```typescript
-const resource = await client.resources.create({
-  name: 'crm-web',
-  kind: 'web_app',
+const fn = await client.functions.create({
+  name: 'hello-world',
+  sourceType: 'computer',
+  sourceEnvironmentId: computer.id,
+  sourcePath: 'functions/hello-world',
+  runtime: 'nodejs22',
   authMode: 'public',
 });
 
-await client.resources.deploy(resource.id);
-const analytics = await client.resources.getAnalytics(resource.id);
+await client.functions.deploy(fn.id);
+
+const response = await client.functions.invoke(fn.id, {
+  method: 'GET',
+  path: '/',
+});
+
+console.log(response.status, response.body);
 ```
 
-### Databases
+Resource managers support `create`, `list`, `get`, `update`, `delete`, `deploy`, `listDeployments`, `rollbackDeployment`, `invoke`, `getAnalytics`, `getLogs`, `listBindings`, `upsertBinding`, `deleteBinding`, file operations, and secret operations. Auth resources also support `listUsers`, `createUser`, `signUp`, and `signIn`.
 
-Create Firestore-backed data surfaces and work with collections/documents:
+## Databases and Secrets
 
-```typescript
-const database = await client.databases.create({
+Use databases for app state and structured output. Use Secrets for credentials that functions, web apps, and agents can read at runtime.
+
+```ts
+const db = await client.databases.create({
   name: 'crm-data',
 });
 
-await client.databases.createCollection(database.id, { name: 'leads' });
-await client.databases.createDocument(database.id, 'leads', {
-  data: { company: 'Acme', stage: 'new' },
+const leads = await client.databases.createCollection(db.id, {
+  name: 'leads',
+});
+
+await client.databases.createDocument(db.id, leads.id, {
+  data: {
+    company: 'Acme',
+    stage: 'qualified',
+    owner: 'agent',
+  },
+});
+
+const vault = await client.secrets.create({
+  name: 'production-secrets',
+});
+
+await client.secrets.createSecret(vault.id, {
+  name: 'SENDGRID_API_KEY',
+  value: process.env.SENDGRID_API_KEY!,
+});
+
+await client.functions.upsertBinding(fn.id, 'database', {
+  targetId: db.id,
+  alias: 'appDatabase',
+});
+
+await client.functions.upsertBinding(fn.id, 'secrets', {
+  targetId: vault.id,
+  alias: 'productionSecrets',
 });
 ```
 
-### Skills
+## Runtime Helpers for Deployed Resources
 
-Manage custom ACP skills:
+Inside deployed Node Functions and server-rendered Web Apps, import native helpers from the SDK. This is the supported replacement for local runtime shims.
 
-```typescript
-const skills = await client.skills.list();
-console.log(skills.map((skill) => skill.name));
-```
+```ts
+import {
+  createDatabaseDocument,
+  getSecretValue,
+  startAgentRun,
+} from 'computer-agents/runtime/server';
 
-### Git
+export default async function handler(request: Request) {
+  const sendgridKey = await getSecretValue('SENDGRID_API_KEY');
 
-Version control on computer workspaces:
+  await createDatabaseDocument('contact_submissions', {
+    email: 'ada@example.com',
+    source: 'website',
+  });
 
-```typescript
-// View uncommitted changes
-const diff = await client.git.diff('env_xxx');
+  const run = await startAgentRun({
+    content: 'Summarize today\\'s contact submissions.',
+  });
 
-// Commit and push
-await client.git.commit('env_xxx', { message: 'Add new feature' });
-await client.git.push('env_xxx');
-```
-
-### Schedules
-
-Automate recurring tasks:
-
-```typescript
-const schedule = await client.schedules.create({
-  name: 'Daily Code Review',
-  type: 'cron',
-  cronExpression: '0 9 * * *',
-  task: 'Review all uncommitted changes',
-  environmentId: 'env_xxx'
-});
-
-// Trigger manually
-await client.schedules.trigger(schedule.id);
-```
-
-### Budget
-
-Monitor spending and control execution:
-
-```typescript
-const status = await client.budget.getStatus();
-console.log(`Balance: $${(status.balance / 100).toFixed(2)}`);
-
-const canRun = await client.budget.canExecute();
-if (!canRun.canExecute) {
-  console.log('Budget exceeded:', canRun.reason);
+  return Response.json({
+    ok: Boolean(sendgridKey),
+    runId: run?.run?.id || run?.id,
+  });
 }
 ```
 
-## Streaming Events
+Runtime helper exports include:
 
-```typescript
-await client.threads.sendMessage(threadId, {
-  content: 'Build a REST API',
-  onEvent: (event) => {
-    switch (event.type) {
-      case 'response.started':
-        console.log('Execution started');
-        break;
-      case 'response.item.completed':
-        console.log('Item:', event);
-        break;
-      case 'response.completed':
-        console.log('Response finished');
-        break;
-      case 'stream.completed':
-        console.log('Done');
-        break;
-      case 'stream.error':
-        console.error('Error:', event);
-        break;
-    }
-  }
+- Runtime metadata: `getComputerAgentsRuntime`, `getConnectedDatabase`, `getConnectedAuth`, `getConnectedAgentRuntime`, `getConnectedSecrets`
+- Secrets: `listSecrets`, `getSecret`, `getSecretValue`
+- Databases: `createDatabaseCollection`, `listDatabaseCollections`, `listDatabaseDocuments`, `getDatabaseDocument`, `createDatabaseDocument`, `putDatabaseDocument`, `deleteDatabaseDocument`
+- Auth: `signUpWithAuthModule`, `signInWithAuthModule`, `getAuthModuleUser`
+- Agent runs: `createAgentRun`, `startAgentRun`, `listAgentRuns`, `getAgentRun`, `sendAgentRunInput`, `waitForAgentRun`, `streamAgentRun`, `getAgentRunEvents`, `cancelAgentRun`
+
+## Schedules, Triggers, and Orchestrations
+
+```ts
+await client.schedules.create({
+  name: 'Daily competitor brief',
+  type: 'cron',
+  cronExpression: '0 9 * * *',
+  task: 'Research competitors and write a concise Markdown brief.',
+  environmentId: computer.id,
 });
+
+await client.triggers.create({
+  name: 'New lead enrichment',
+  eventType: 'webhook',
+  task: 'Enrich the new lead and update the CRM database.',
+});
+
+await client.orchestrations.create({
+  name: 'Research and build landing page',
+  objective: 'Research the market, write copy, and deploy a landing page.',
+});
+```
+
+## Agents and Models
+
+```ts
+const models = await client.agents.listModels();
+
+const agent = await client.agents.create({
+  name: 'Senior Product Engineer',
+  model: 'deepseek-v4-pro',
+  instructions: 'Build carefully, test changes, and explain tradeoffs.',
+  reasoningEffort: 'high',
+});
+```
+
+Computer Agents supports built-in models from Anthropic, OpenAI, Gemini, DeepSeek, Kimi, and connected external models on supported plans. Use `client.agents.listModels()` to read the current catalog instead of hard-coding model availability.
+
+## Budget and Usage
+
+```ts
+const budget = await client.budget.getStatus();
+const canRun = await client.budget.canExecute();
+const usage = await client.billing.getStats({ days: 30 });
+
+console.log({ budget, canRun, usage });
 ```
 
 ## Error Handling
 
-```typescript
-import { ComputerAgentsClient, ApiClientError } from 'computer-agents';
+```ts
+import { ApiClientError } from 'computer-agents';
 
 try {
-  await client.run('Task');
+  await client.run('Ship the dashboard');
 } catch (error) {
   if (error instanceof ApiClientError) {
-    console.error(`API Error: ${error.message}`);
-    console.error(`Status: ${error.status}`);
-    console.error(`Code: ${error.code}`);
+    console.error(error.status, error.code, error.message);
   }
 }
 ```
 
-## Examples
+## SDK Surface
 
-See the [`examples/`](./examples) directory for complete, runnable examples:
-
-| Example | Description |
-|---------|-------------|
-| [Hello World](./examples/01-hello-world.ts) | Simplest possible usage |
-| [Multi-turn Conversation](./examples/02-multi-turn-conversation.ts) | Thread-based conversations |
-| [Streaming](./examples/03-streaming.ts) | Real-time SSE event handling |
-| [Custom Agent](./examples/04-custom-agent.ts) | Agent configuration with models and instructions |
-| [Environments](./examples/05-environments.ts) | Environment management |
-| [File Operations](./examples/06-file-operations.ts) | Upload, download, and manage files |
-| [Copy Thread](./examples/07-copy-thread.ts) | Fork conversations |
-| [Search Threads](./examples/08-search-threads.ts) | Full-text search across threads |
-| [MCP Servers](./examples/09-mcp-servers.ts) | Model Context Protocol integration |
-| [Git Operations](./examples/10-git-operations.ts) | Diffs, commits, and pushes |
-| [Budget Management](./examples/11-budget-management.ts) | Monitor spending |
-| [Schedules](./examples/12-schedules.ts) | Automate recurring tasks |
-| [Execution Logs](./examples/13-execution-logs.ts) | Logs and deep research sessions |
-
-Run any example:
-
-```bash
-COMPUTER_AGENTS_API_KEY=your-key npx tsx examples/01-hello-world.ts
-```
-
-## TypeScript
-
-Full type definitions are included:
-
-```typescript
-import type {
-  Thread,
-  Environment,
-  CloudAgent,
-  Schedule,
-  Run,
-  AgentModel,
-  ReasoningEffort,
-  MessageStreamEvent,
-  McpServer,
-  BudgetStatus,
-  CopyThreadParams,
-  SearchThreadsResponse,
-  ThreadLogEntry,
-  ResearchSession,
-} from 'computer-agents';
-```
-
-## License
-
-MIT
+| Manager | Scope |
+| --- | --- |
+| `client.threads` | Messages, logs, diffs, research, feedback, permission requests, and thread lifecycle. |
+| `client.computers` / `client.environments` | Persistent cloud computers, runtimes, packages, snapshots, GUI, analytics, local sync. |
+| `client.files` | Workspace files and directories. |
+| `client.git` | Git status, diffs, commits, branches, clone, push. |
+| `client.projects` | Project lifecycle, project files, schedules, computers, sync. |
+| `client.tasks` | Tasks, comments, releases, sprints, and task-linked threads. |
+| `client.agents` | Agent profiles, models, analytics. |
+| `client.webApps`, `client.functions`, `client.auth`, `client.databases`, `client.runtimes`, `client.secrets` | Product resources. |
+| `client.resources` | Generic server resource operations. |
+| `client.skills` | Custom skills. |
+| `client.schedules`, `client.triggers`, `client.orchestrations` | Recurring, event-driven, and multi-agent work. |
+| `client.notifications` | In-app notifications and push tokens. |
+| `client.budget` / `client.billing` | Budget checks, checkout, usage, and transactions. |
 
 ## Links
 
 - [Website](https://computer-agents.com)
+- [Documentation](https://computer-agents.com/developers)
+- [API Reference](https://computer-agents.com/api-reference)
 - [npm](https://www.npmjs.com/package/computer-agents)
 - [GitHub](https://github.com/computer-agents/computer-agents-sdk)
+
+## License
+
+MIT

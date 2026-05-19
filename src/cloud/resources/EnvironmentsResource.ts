@@ -127,10 +127,10 @@ export class EnvironmentsResource {
    * Creates one if it doesn't exist.
    */
   async getDefault(): Promise<Environment> {
-    const response = await this.client.get<Environment>(
+    const response = await this.client.get<{ environment?: Environment } & Partial<Environment>>(
       `/environments/default`
     );
-    return response;
+    return response.environment ?? (response as Environment);
   }
 
   /**

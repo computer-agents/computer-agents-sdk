@@ -4,8 +4,11 @@ import type {
   Resource,
   ResourceAnalyticsResponse,
   ResourceBinding,
+  ResourceBindingTargetType,
+  ResourceDeployment,
   ResourceKind,
   ResourceLogEntry,
+  ResourceSecret,
   UpdateResourceParams,
 } from '../types';
 import {
@@ -66,8 +69,24 @@ class KindScopedResources<K extends ResourceKind> {
     invocationUrl?: string | null;
     revision?: string | null;
     deploymentType?: string | null;
+    deployment?: ResourceDeployment;
   }> {
     return this.resources.deploy(serverId);
+  }
+
+  async listDeployments(serverId: string): Promise<ResourceDeployment[]> {
+    return this.resources.listDeployments(serverId);
+  }
+
+  async rollbackDeployment(
+    serverId: string,
+    params: { deploymentId?: string; revision?: string } = {},
+  ): Promise<{
+    server?: Resource;
+    deployment?: ResourceDeployment;
+    activeDeployment?: ResourceDeployment;
+  }> {
+    return this.resources.rollbackDeployment(serverId, params);
   }
 
   async invoke(serverId: string, params: ResourceInvokeParams = {}): Promise<{
@@ -98,7 +117,7 @@ class KindScopedResources<K extends ResourceKind> {
 
   async upsertBinding(
     serverId: string,
-    targetType: 'database' | 'auth' | 'agent_runtime',
+    targetType: ResourceBindingTargetType,
     params: { targetId: string; alias?: string; metadata?: Record<string, unknown> | null },
   ): Promise<ResourceBinding[]> {
     return this.resources.upsertBinding(serverId, targetType, params);
@@ -106,7 +125,7 @@ class KindScopedResources<K extends ResourceKind> {
 
   async deleteBinding(
     serverId: string,
-    targetType: 'database' | 'auth' | 'agent_runtime',
+    targetType: ResourceBindingTargetType,
   ): Promise<ResourceBinding[]> {
     return this.resources.deleteBinding(serverId, targetType);
   }
@@ -148,6 +167,33 @@ class KindScopedResources<K extends ResourceKind> {
 
   async deleteFile(serverId: string, filePath: string): Promise<Record<string, unknown>> {
     return this.resources.deleteFile(serverId, filePath);
+  }
+
+  async listSecrets(serverId: string): Promise<ResourceSecret[]> {
+    return this.resources.listSecrets(serverId);
+  }
+
+  async getSecret(serverId: string, secretId: string): Promise<ResourceSecret> {
+    return this.resources.getSecret(serverId, secretId);
+  }
+
+  async createSecret(
+    serverId: string,
+    params: { name: string; value: string; description?: string; metadata?: Record<string, unknown> | null },
+  ): Promise<ResourceSecret> {
+    return this.resources.createSecret(serverId, params);
+  }
+
+  async updateSecret(
+    serverId: string,
+    secretId: string,
+    params: { name?: string; value?: string; description?: string; metadata?: Record<string, unknown> | null },
+  ): Promise<ResourceSecret> {
+    return this.resources.updateSecret(serverId, secretId, params);
+  }
+
+  async deleteSecret(serverId: string, secretId: string): Promise<boolean> {
+    return this.resources.deleteSecret(serverId, secretId);
   }
 }
 
@@ -195,6 +241,12 @@ export class AuthResource extends KindScopedResources<'auth'> {
 export class AgentRuntimesResource extends KindScopedResources<'agent_runtime'> {
   constructor(client: ApiClient) {
     super(client, 'agent_runtime');
+  }
+}
+
+export class SecretsResource extends KindScopedResources<'secrets'> {
+  constructor(client: ApiClient) {
+    super(client, 'secrets');
   }
 }
 

@@ -11,8 +11,12 @@
 import type { ApiClient } from '../ApiClient';
 import type {
   Project,
+  CreateProjectParams,
   UpdateProjectParams,
   ProjectStats,
+  ProjectDetailResult,
+  ProjectListParams,
+  ProjectListResult,
   FileEntry,
   ListFilesParams,
   UploadFileParams,
@@ -21,6 +25,88 @@ import type {
 
 export class ProjectsResource {
   constructor(private readonly client: ApiClient) {}
+
+  private toQuery(params: object): Record<string, string | number | boolean | undefined> {
+    const query: Record<string, string | number | boolean | undefined> = {};
+    for (const [key, value] of Object.entries(params as Record<string, unknown>)) {
+      if (value === undefined || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        query[key] = value;
+      }
+    }
+    return query;
+  }
+
+  /**
+   * List planning projects for the authenticated user.
+   */
+  async list(params: ProjectListParams = {}): Promise<ProjectListResult> {
+    const response = await this.client.get<{
+      data: Array<Project & { summary?: Record<string, unknown> }>;
+      has_more?: boolean;
+      total_count?: number;
+    }>(`/projects`, this.toQuery(params));
+    return {
+      data: response.data,
+      hasMore: response.has_more ?? false,
+      total: response.total_count ?? response.data.length,
+    };
+  }
+
+  /**
+   * Create a planning project.
+   */
+  async create(params: CreateProjectParams): Promise<Project> {
+    const response = await this.client.post<{ project: Project }>(
+      `/projects`,
+      params
+    );
+    return response.project;
+  }
+
+  /**
+   * Get a planning project by ID.
+   */
+  async getById(projectId: string): Promise<ProjectDetailResult> {
+    return this.client.get<ProjectDetailResult>(`/projects/${projectId}`);
+  }
+
+  /**
+   * Update a planning project by ID.
+   */
+  async updateById(projectId: string, params: UpdateProjectParams): Promise<Project> {
+    const response = await this.client.patch<{ project: Project }>(
+      `/projects/${projectId}`,
+      params
+    );
+    return response.project;
+  }
+
+  /**
+   * Delete a planning project by ID.
+   */
+  async deleteById(projectId: string): Promise<Record<string, unknown>> {
+    return this.client.delete(`/projects/${projectId}`);
+  }
+
+  /**
+   * List schedules attached to a planning project.
+   */
+  async listSchedules(projectId: string, params: { rangeStart?: string; rangeEnd?: string } = {}): Promise<{
+    data: Array<Record<string, unknown>>;
+    hasMore: boolean;
+    total: number;
+  }> {
+    const response = await this.client.get<{
+      data: Array<Record<string, unknown>>;
+      has_more?: boolean;
+      total_count?: number;
+    }>(`/projects/${projectId}/schedules`, this.toQuery(params));
+    return {
+      data: response.data,
+      hasMore: response.has_more ?? false,
+      total: response.total_count ?? response.data.length,
+    };
+  }
 
   /**
    * Get the current project (bound to this API key)

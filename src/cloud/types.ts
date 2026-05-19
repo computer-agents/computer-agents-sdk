@@ -50,6 +50,9 @@ export interface Project {
   type: ProjectType;
   sources?: ProjectSource[];
   userId?: string;
+  color?: string | null;
+  defaultEnvironmentId?: string | null;
+  environmentIds?: string[];
   metadata?: Record<string, unknown>;
   tags?: string[];
   createdAt: string;
@@ -63,6 +66,9 @@ export interface CreateProjectParams {
   description?: string;
   type?: ProjectType;
   sources?: ProjectSource[];
+  color?: string | null;
+  environmentIds?: string[];
+  defaultEnvironmentId?: string | null;
   metadata?: Record<string, unknown>;
   tags?: string[];
 }
@@ -70,6 +76,9 @@ export interface CreateProjectParams {
 export interface UpdateProjectParams {
   name?: string;
   description?: string;
+  color?: string | null;
+  environmentIds?: string[];
+  defaultEnvironmentId?: string | null;
   metadata?: Record<string, unknown>;
   tags?: string[];
 }
@@ -80,6 +89,39 @@ export interface ProjectStats {
   totalTokens: number;
   totalCost: number;
   storageBytes: number;
+}
+
+export interface ProjectSummary {
+  environmentsCount?: number;
+  threadsCount?: number;
+  activeThreadsCount?: number;
+  tasksCount?: number;
+  openTasksCount?: number;
+  sprintCount?: number;
+  activeSprintCount?: number;
+  releaseCount?: number;
+  activeReleaseCount?: number;
+  [key: string]: unknown;
+}
+
+export interface ProjectListParams {
+  type?: ProjectType;
+  q?: string;
+  limit?: number;
+}
+
+export interface ProjectListResult {
+  data: Array<Project & { summary?: ProjectSummary }>;
+  hasMore: boolean;
+  total: number;
+}
+
+export interface ProjectDetailResult {
+  project: Project;
+  summary?: ProjectSummary;
+  environments?: Environment[];
+  recentThreads?: Thread[];
+  stats?: ProjectStats;
 }
 
 // ============================================================================
@@ -249,8 +291,31 @@ export interface UpdateEnvironmentParams {
   metadata?: EnvironmentMetadata;
 }
 
-export type CreateComputerParams = CreateEnvironmentParams;
-export type UpdateComputerParams = UpdateEnvironmentParams;
+export interface CreateComputerLocalParams {
+  path: string;
+  syncRoot?: string;
+  ignorePatterns?: string[] | null;
+  syncMode?: WorkspaceBindingSyncMode;
+  executionMode?: WorkspaceBindingExecutionMode;
+  device?: LocalComputerDeviceHint;
+}
+
+export interface CreateComputerParams extends CreateEnvironmentParams {
+  local?: CreateComputerLocalParams;
+}
+
+export interface UpdateComputerLocalParams {
+  path?: string;
+  syncRoot?: string;
+  ignorePatterns?: string[] | null;
+  syncMode?: WorkspaceBindingSyncMode;
+  executionMode?: WorkspaceBindingExecutionMode;
+  device?: LocalComputerDeviceHint;
+}
+
+export interface UpdateComputerParams extends UpdateEnvironmentParams {
+  local?: UpdateComputerLocalParams;
+}
 
 export interface ContainerStatus {
   status: EnvironmentStatus;
@@ -438,7 +503,7 @@ export interface EnvironmentForkFromSnapshotResponse {
 // Thread Types
 // ============================================================================
 
-export type ThreadStatus = 'active' | 'running' | 'completed' | 'failed' | 'archived' | 'cancelled' | 'deleted';
+export type ThreadStatus = 'active' | 'running' | 'permission_asked' | 'completed' | 'failed' | 'archived' | 'cancelled' | 'deleted';
 
 export interface ThreadMessage {
   role: 'user' | 'assistant' | 'system';
@@ -527,6 +592,8 @@ export interface ThreadLogEntry {
   content: string;
   timestamp?: string;
   relativeTime?: string;
+  logType?: string;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface ResearchSession {
@@ -540,6 +607,58 @@ export interface ResearchSession {
   updatedAt: string;
 }
 
+export type ThreadFeedbackRating = 'up' | 'down';
+export type ThreadFeedbackReportType = 'general' | 'bug' | 'child_safety' | 'response';
+
+export interface ThreadFeedbackSummary {
+  threadId: string;
+  upCount: number;
+  downCount: number;
+  userRating: ThreadFeedbackRating | null;
+  reportCount: number;
+}
+
+export interface ThreadFeedbackReportCreate {
+  reportType: ThreadFeedbackReportType;
+  message: string;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface ThreadFeedbackReport {
+  id: string;
+  threadId: string;
+  userId: string;
+  reportType: ThreadFeedbackReportType;
+  message: string;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface ThreadPermissionRequest {
+  requestId: string;
+  threadId: string;
+  userId: string;
+  toolName: string;
+  input: string;
+  currentMode: string;
+  requiredMode: string;
+  reason?: string | null;
+  createdAt: string;
+}
+
+export interface ThreadPermissionDecisionParams {
+  decision: 'allow' | 'deny';
+  reason?: string | null;
+}
+
+export interface ThreadPermissionDecisionResponse {
+  ok: boolean;
+  requestId: string;
+  decision: 'allow' | 'deny';
+  active?: boolean;
+  message?: string | null;
+}
+
 export interface SendMessageParams {
   content: string;
   mcpServers?: McpServer[];
@@ -550,6 +669,294 @@ export interface SendMessageParams {
   internetAccess?: boolean;
   attachments?: unknown[];
   runId?: string;
+}
+
+// ============================================================================
+// Task Types
+// ============================================================================
+
+export type TaskStatus = 'backlog' | 'todo' | 'in_progress' | 'blocked' | 'in_review' | 'done';
+export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+export type TaskType = 'task' | 'subtask';
+export type TaskCommentAuthorType = 'user' | 'agent' | 'system';
+export type TaskSprintStatus = 'planned' | 'active' | 'completed';
+export type TaskReleaseStatus = 'planned' | 'active' | 'completed';
+
+export interface Task {
+  object?: 'task';
+  id: string;
+  userId?: string;
+  projectId?: string | null;
+  releaseId?: string | null;
+  sprintId?: string | null;
+  title: string;
+  description?: string;
+  status: TaskStatus;
+  priority?: TaskPriority;
+  type?: TaskType;
+  parentTaskId?: string | null;
+  assigneeAgentId?: string | null;
+  dependencyIds?: string[];
+  linkedThreadIds?: string[];
+  lastStartedThreadId?: string | null;
+  scheduledStartAt?: string | null;
+  scheduledEndAt?: string | null;
+  dueAt?: string | null;
+  completedAt?: string | null;
+  sortOrder?: number;
+  reviewRequired?: boolean;
+  reviewerActorId?: string | null;
+  reviewerActorKind?: string | null;
+  reviewerName?: string | null;
+  metadata?: Record<string, unknown> | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TaskListParams extends PaginationParams {
+  projectId?: string | null;
+  releaseId?: string | null;
+  sprintId?: string | null;
+  status?: TaskStatus;
+  assigneeAgentId?: string;
+  q?: string;
+}
+
+export interface CreateTaskParams {
+  title: string;
+  description?: string;
+  projectId?: string | null;
+  releaseId?: string | null;
+  status?: TaskStatus;
+  priority?: TaskPriority;
+  type?: TaskType;
+  taskType?: TaskType;
+  parentTaskId?: string | null;
+  sprintId?: string | null;
+  assigneeAgentId?: string | null;
+  dependencyIds?: string[];
+  linkedThreadIds?: string[];
+  lastStartedThreadId?: string | null;
+  scheduledStartAt?: string | null;
+  scheduledEndAt?: string | null;
+  dueAt?: string | null;
+  completedAt?: string | null;
+  sortOrder?: number;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface UpdateTaskParams extends Partial<CreateTaskParams> {}
+
+export interface TaskListResult {
+  data: Task[];
+  hasMore: boolean;
+  total: number;
+}
+
+export interface TaskDetails {
+  project?: Project | null;
+  release?: TaskRelease | null;
+  sprint?: TaskSprint | null;
+  assignee?: CloudAgent | null;
+  dependencies?: Task[];
+  dependents?: Task[];
+  subtasks?: Task[];
+  subtaskIds?: string[];
+  parentTask?: Task | null;
+  parentTaskId?: string | null;
+  taskType?: TaskType;
+  review?: {
+    reviewRequired?: boolean;
+    reviewerActorId?: string | null;
+    reviewerActorKind?: string | null;
+    reviewerName?: string | null;
+  } | null;
+  linkedThreads?: Thread[];
+  lastStartedThread?: Thread | null;
+  blockedByDependencyIds?: string[];
+  readyToStart?: boolean;
+}
+
+export interface TaskDetailResult {
+  task: Task;
+  details?: TaskDetails;
+  comments?: TaskComment[];
+}
+
+export interface TaskComment {
+  object?: 'task.comment';
+  id: string;
+  userId?: string;
+  projectId?: string | null;
+  taskId: string;
+  task?: Partial<Task>;
+  body: string;
+  authorType?: TaskCommentAuthorType;
+  authorAgentId?: string | null;
+  authorName?: string | null;
+  sourceThreadId?: string | null;
+  threadId?: string | null;
+  metadata?: Record<string, unknown> | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TaskCommentCreateParams {
+  body?: string;
+  content?: string;
+  authorType?: TaskCommentAuthorType;
+  authorAgentId?: string | null;
+  authorName?: string | null;
+  sourceThreadId?: string | null;
+  threadId?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface TaskCommentListParams extends PaginationParams {
+  authorType?: TaskCommentAuthorType;
+  authorAgentId?: string;
+}
+
+export interface TaskCommentListResult {
+  data: TaskComment[];
+  hasMore: boolean;
+  total: number;
+}
+
+export interface TaskSprint {
+  id: string;
+  userId?: string;
+  projectId?: string | null;
+  name: string;
+  goal?: string;
+  status?: TaskSprintStatus;
+  startAt?: string | null;
+  endAt?: string | null;
+  sortOrder?: number;
+  metadata?: Record<string, unknown> | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TaskSprintCreateParams {
+  projectId?: string | null;
+  name: string;
+  goal?: string;
+  status?: TaskSprintStatus;
+  startAt?: string | null;
+  endAt?: string | null;
+  sortOrder?: number;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface TaskSprintUpdateParams extends Partial<TaskSprintCreateParams> {}
+
+export interface TaskSprintListParams extends PaginationParams {
+  projectId?: string | null;
+  status?: TaskSprintStatus;
+  q?: string;
+}
+
+export interface TaskSprintListResult {
+  data: TaskSprint[];
+  hasMore: boolean;
+  total: number;
+}
+
+export interface TaskSprintDetailResult {
+  sprint: TaskSprint;
+  tasks?: Task[];
+}
+
+export interface TaskRelease {
+  object?: 'task.release';
+  id: string;
+  userId?: string;
+  projectId?: string | null;
+  name: string;
+  description?: string;
+  startAt?: string | null;
+  endAt?: string | null;
+  sortOrder?: number;
+  status?: TaskReleaseStatus;
+  metadata?: Record<string, unknown> | null;
+  taskCount?: number;
+  openTaskCount?: number;
+  taskIds?: string[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TaskReleaseCreateParams {
+  projectId: string;
+  name: string;
+  description?: string;
+  startAt?: string | null;
+  endAt?: string | null;
+  sortOrder?: number;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface TaskReleaseUpdateParams extends Partial<TaskReleaseCreateParams> {}
+
+export interface TaskReleaseListParams extends PaginationParams {
+  projectId?: string;
+  q?: string;
+}
+
+export interface TaskReleaseListResult {
+  data: TaskRelease[];
+  hasMore: boolean;
+  total: number;
+}
+
+export interface TaskReleaseDetailResult {
+  release: TaskRelease;
+  tasks?: Task[];
+}
+
+export interface TaskWorkspaceParams {
+  projectId?: string | null;
+  q?: string;
+  rangeStart?: string;
+  rangeEnd?: string;
+}
+
+export interface TaskWorkspaceResult {
+  workspace: Record<string, unknown>;
+}
+
+export interface TaskStartThreadParams {
+  environmentId?: string;
+  agentId?: string;
+  moveToInProgress?: boolean;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface TaskStartThreadResult {
+  thread: Thread;
+  task: Task;
+  subtasks?: Task[];
+}
+
+export interface TaskRunThreadParams extends TaskStartThreadParams {
+  message?: string;
+  content?: string;
+  task?: string;
+}
+
+export interface TaskRunThreadResult extends TaskStartThreadResult {
+  execution?: {
+    success: boolean;
+    response?: string;
+    actions?: unknown[];
+    durationMs?: number;
+    usage?: {
+      inputTokens?: number;
+      outputTokens?: number;
+    };
+    error?: string;
+  };
 }
 
 export interface AgentConfig {
@@ -703,8 +1110,17 @@ export type BuiltinAgentModel =
   | 'claude-opus-4-6'
   | 'claude-sonnet-4-5'
   | 'claude-haiku-4-5'
+  | 'gpt-5.5-pro'
+  | 'gpt-5.5'
+  | 'gpt-5.4'
+  | 'gpt-5.4-mini'
+  | 'gpt-5.4-nano'
   | 'gemini-3-flash'
-  | 'gemini-3-1-pro';
+  | 'gemini-3-1-flash'
+  | 'gemini-3-1-pro'
+  | 'deepseek-v4-pro'
+  | 'deepseek-v4-flash'
+  | 'kimi-k2.6';
 
 export type ExternalAgentModel = `external:${string}`;
 
@@ -723,6 +1139,29 @@ export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
  * Deep research model options (for research skill).
  */
 export type DeepResearchModel = 'gemini-3-flash-preview' | 'gemini-3-pro-preview';
+export type PermissionAccessLevel = 'full_access' | 'ask_for_permission' | 'read_only' | 'no_access';
+export type PermissionResourceType = 'agents' | 'skills' | 'servers' | 'computers' | 'files' | 'directories' | 'projects';
+export type PermissionSetSubjectType = 'agent' | 'human_user' | 'team';
+
+export interface PermissionRule {
+  id?: string;
+  targetId?: string;
+  path?: string;
+  access: PermissionAccessLevel;
+  note?: string;
+}
+
+export interface PermissionResourcePolicy {
+  defaultAccess: PermissionAccessLevel;
+  rules?: PermissionRule[];
+}
+
+export interface PermissionSet {
+  version: 1;
+  subjectType: PermissionSetSubjectType;
+  defaultAccess: PermissionAccessLevel;
+  resources: Partial<Record<PermissionResourceType, PermissionResourcePolicy>>;
+}
 
 export interface AgentBinary {
   path: string;
@@ -740,6 +1179,7 @@ export interface CloudAgent {
   reasoningEffort?: ReasoningEffort;
   enabledSkills?: string[];
   deepResearchModel?: DeepResearchModel;
+  permissionSet?: PermissionSet;
   metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -755,6 +1195,7 @@ export interface CreateAgentParams {
   reasoningEffort?: ReasoningEffort;
   enabledSkills?: string[];
   deepResearchModel?: DeepResearchModel;
+  permissionSet?: PermissionSet;
   metadata?: Record<string, unknown>;
 }
 
@@ -767,6 +1208,7 @@ export interface UpdateAgentParams {
   reasoningEffort?: ReasoningEffort;
   enabledSkills?: string[];
   deepResearchModel?: DeepResearchModel;
+  permissionSet?: PermissionSet | null;
   metadata?: Record<string, unknown>;
 }
 
@@ -804,9 +1246,10 @@ export interface AgentAnalyticsResponse {
 // Resources, Databases, and Skills
 // ============================================================================
 
-export type ResourceKind = 'web_app' | 'function' | 'auth' | 'agent_runtime';
+export type ResourceKind = 'website' | 'web_app' | 'api' | 'function' | 'auth' | 'agent_runtime' | 'secrets';
 export type ResourceAuthMode = 'public' | 'private';
 export type ResourceStatus = 'draft' | 'deploying' | 'deployed' | 'failed' | 'inactive';
+export type ResourceBindingTargetType = 'database' | 'auth' | 'agent_runtime' | 'secrets';
 
 export interface Resource {
   id: string;
@@ -876,11 +1319,42 @@ export interface ResourceLogEntry {
 
 export interface ResourceBinding {
   id?: string;
-  targetType?: 'database' | 'auth' | 'agent_runtime' | string;
+  targetType?: ResourceBindingTargetType | string;
   targetId?: string;
   alias?: string;
   accessMode?: string;
   metadata?: Record<string, unknown> | null;
+}
+
+export interface ResourceDeployment {
+  id?: string;
+  at?: string;
+  outcome?: 'success' | 'failed' | 'rollback' | string;
+  type?: string | null;
+  serviceName?: string | null;
+  region?: string | null;
+  revision?: string | null;
+  serviceUrl?: string | null;
+  imageUrl?: string | null;
+  runtime?: string | null;
+  authMode?: ResourceAuthMode | string | null;
+  sourceEnvironmentId?: string | null;
+  sourcePath?: string | null;
+  connections?: Record<string, unknown> | null;
+  error?: string | null;
+  rolledBackToDeploymentId?: string | null;
+}
+
+export interface ResourceSecret {
+  id: string;
+  name: string;
+  description?: string;
+  value?: string;
+  valueMasked?: string;
+  metadata?: Record<string, unknown> | null;
+  createdAt?: string;
+  updatedAt?: string;
+  lastAccessedAt?: string | null;
 }
 
 export interface Database {
@@ -1064,6 +1538,39 @@ export interface UploadFileParams {
 export interface CreateDirectoryParams {
   path: string;
   environmentId?: string;
+}
+
+// ============================================================================
+// Notification Types
+// ============================================================================
+
+export interface InAppNotification {
+  id: string;
+  html: string;
+  createdAt?: string;
+  createdBy?: string | null;
+  expiresAt?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface PushTokenRegistration {
+  token: string;
+  platform?: string;
+  bundleId: string;
+}
+
+export interface PushTokenRegistrationResponse {
+  success: boolean;
+  tokenId: string;
+}
+
+export interface PushTokenDeleteResponse {
+  success: boolean;
+}
+
+export interface PushTokenDescriptor {
+  id: string;
+  platform: string;
 }
 
 // ============================================================================
@@ -1325,6 +1832,350 @@ export interface OrchestrationRun {
   stepResults: OrchestrationStepResult[];
   createdAt: number;
   completedAt?: number;
+}
+
+// ============================================================================
+// Local Bridge Types
+// ============================================================================
+
+export type DeviceStatus = 'online' | 'offline';
+
+export interface Device {
+  id: string;
+  userId: string;
+  name: string;
+  platform: string | null;
+  hostname: string | null;
+  appVersion: string | null;
+  daemonVersion: string | null;
+  status: DeviceStatus;
+  capabilities: Record<string, unknown> | null;
+  lastSeenAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateDeviceParams {
+  name: string;
+  platform?: string | null;
+  hostname?: string | null;
+  appVersion?: string | null;
+  daemonVersion?: string | null;
+  status?: DeviceStatus;
+  capabilities?: Record<string, unknown> | null;
+}
+
+export interface UpdateDeviceParams {
+  name?: string;
+  platform?: string | null;
+  hostname?: string | null;
+  appVersion?: string | null;
+  daemonVersion?: string | null;
+  status?: DeviceStatus;
+  capabilities?: Record<string, unknown> | null;
+  lastSeenAt?: string | null;
+}
+
+export interface HeartbeatDeviceParams {
+  appVersion?: string | null;
+  daemonVersion?: string | null;
+  capabilities?: Record<string, unknown> | null;
+}
+
+export type WorkspaceBindingSyncMode = 'off' | 'manual' | 'watch';
+export type WorkspaceBindingExecutionMode = 'legacy_remote' | 'bridge_local';
+
+export interface WorkspaceBinding {
+  id: string;
+  userId: string;
+  deviceId: string;
+  environmentId: string;
+  projectId: string | null;
+  name: string | null;
+  localPath: string;
+  syncRoot: string;
+  ignorePatterns: string[] | null;
+  syncMode: WorkspaceBindingSyncMode;
+  executionMode: WorkspaceBindingExecutionMode;
+  lastPushedSnapshotId: string | null;
+  lastPulledSnapshotId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateWorkspaceBindingParams {
+  deviceId: string;
+  environmentId: string;
+  projectId?: string | null;
+  name?: string | null;
+  localPath: string;
+  syncRoot?: string;
+  ignorePatterns?: string[] | null;
+  syncMode?: WorkspaceBindingSyncMode;
+  executionMode?: WorkspaceBindingExecutionMode;
+}
+
+export interface UpdateWorkspaceBindingParams {
+  projectId?: string | null;
+  name?: string | null;
+  localPath?: string;
+  syncRoot?: string;
+  ignorePatterns?: string[] | null;
+  syncMode?: WorkspaceBindingSyncMode;
+  executionMode?: WorkspaceBindingExecutionMode;
+  lastPushedSnapshotId?: string | null;
+  lastPulledSnapshotId?: string | null;
+}
+
+export interface LocalComputerDeviceHint {
+  id?: string;
+  name?: string;
+  platform?: string | null;
+  hostname?: string | null;
+  appVersion?: string | null;
+  daemonVersion?: string | null;
+  capabilities?: Record<string, unknown> | null;
+  status?: DeviceStatus;
+}
+
+export interface LocalComputerDevice {
+  id: string;
+  name: string;
+  platform: string | null;
+  hostname: string | null;
+  status: DeviceStatus;
+  lastSeenAt: string | null;
+}
+
+export type LocalComputer = Computer & {
+  device: LocalComputerDevice;
+  local: {
+    bindingId: string;
+    localPath: string;
+    syncRoot: string;
+    ignorePatterns: string[] | null;
+    syncMode: WorkspaceBindingSyncMode;
+    executionMode: WorkspaceBindingExecutionMode;
+    lastPushedSnapshotId: string | null;
+    lastPulledSnapshotId: string | null;
+  };
+};
+
+export interface CreateLocalComputerParams extends Omit<CreateComputerParams, 'name' | 'local'> {
+  path: string;
+  name?: string;
+  syncRoot?: string;
+  ignorePatterns?: string[] | null;
+  syncMode?: WorkspaceBindingSyncMode;
+  executionMode?: WorkspaceBindingExecutionMode;
+  device?: LocalComputerDeviceHint;
+}
+
+export interface ConnectLocalComputerParams {
+  path: string;
+  name?: string | null;
+  projectId?: string | null;
+  syncRoot?: string;
+  ignorePatterns?: string[] | null;
+  syncMode?: WorkspaceBindingSyncMode;
+  executionMode?: WorkspaceBindingExecutionMode;
+  device?: LocalComputerDeviceHint;
+}
+
+export interface ListLocalComputersParams {
+  deviceId?: string;
+  projectId?: string | null;
+  syncMode?: WorkspaceBindingSyncMode;
+  executionMode?: WorkspaceBindingExecutionMode;
+  limit?: number;
+  offset?: number;
+}
+
+export type WorkspacePushSessionStatus = 'prepared' | 'superseded' | 'cancelled';
+
+export interface WorkspacePushSession {
+  id: string;
+  workspaceBindingId: string;
+  userId: string;
+  deviceId: string;
+  environmentId: string;
+  projectId: string | null;
+  status: WorkspacePushSessionStatus;
+  planSignature: string;
+  plan: Record<string, unknown>;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PrepareWorkspacePushSessionParams {
+  plan: Record<string, unknown>;
+  planSignature: string;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface PrepareComputerPushParams {
+  plan: Record<string, unknown>;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface PrepareWorkspacePushSessionResult {
+  pushSession: WorkspacePushSession;
+  created: boolean;
+}
+
+export type WorkspacePullSessionStatus = 'prepared' | 'superseded' | 'cancelled';
+
+export interface WorkspacePullSession {
+  id: string;
+  workspaceBindingId: string;
+  userId: string;
+  deviceId: string;
+  environmentId: string;
+  projectId: string | null;
+  status: WorkspacePullSessionStatus;
+  planSignature: string;
+  plan: Record<string, unknown>;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PrepareWorkspacePullSessionParams {
+  plan: Record<string, unknown>;
+  planSignature: string;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface PrepareComputerPullParams {
+  plan: Record<string, unknown>;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface PrepareWorkspacePullSessionResult {
+  pullSession: WorkspacePullSession;
+  created: boolean;
+}
+
+export interface AttachPullSessionApplyPreviewParams {
+  preview: Record<string, unknown>;
+  previewSignature: string;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface AttachComputerPullPreviewParams {
+  preview: Record<string, unknown>;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface AttachPullSessionApplyPreviewResult {
+  pullSession: WorkspacePullSession;
+  updated: boolean;
+}
+
+export interface AttachPullSessionApplyResultParams {
+  result: Record<string, unknown>;
+  resultSignature: string;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface AttachComputerPullResultParams {
+  result: Record<string, unknown>;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface AttachPullSessionApplyResultResult {
+  pullSession: WorkspacePullSession;
+  updated: boolean;
+}
+
+export type LocalExecutionSessionStatus =
+  | 'created'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+export interface LocalExecutionSession {
+  id: string;
+  threadId: string;
+  userId: string;
+  deviceId: string;
+  workspaceBindingId: string | null;
+  environmentId: string | null;
+  status: LocalExecutionSessionStatus;
+  metadata: Record<string, unknown> | null;
+  error: string | null;
+  startedAt: string | null;
+  lastHeartbeatAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateLocalExecutionSessionParams {
+  deviceId: string;
+  workspaceBindingId?: string | null;
+  status?: Extract<LocalExecutionSessionStatus, 'created' | 'running'>;
+  metadata?: Record<string, unknown> | null;
+  startedAt?: string | null;
+}
+
+export interface CreateLocalComputerSessionParams
+  extends Omit<CreateLocalExecutionSessionParams, 'deviceId' | 'workspaceBindingId'> {
+  computerId: string;
+}
+
+export interface HeartbeatLocalExecutionSessionParams {
+  metadata?: Record<string, unknown> | null;
+  error?: string | null;
+}
+
+export interface CompleteLocalExecutionSessionParams {
+  status?: Extract<LocalExecutionSessionStatus, 'completed' | 'failed' | 'cancelled'>;
+  completedAt?: string | null;
+  error?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export type LocalSessionCommandType = 'cancel' | 'pause' | 'resume' | 'message';
+export type LocalSessionCommandStatus = 'pending' | 'acknowledged' | 'completed' | 'cancelled';
+
+export interface LocalSessionCommand {
+  id: string;
+  sessionId: string;
+  threadId: string;
+  userId: string;
+  commandType: LocalSessionCommandType;
+  payload: Record<string, unknown> | null;
+  status: LocalSessionCommandStatus;
+  createdAt: string;
+  acknowledgedAt: string | null;
+  completedAt: string | null;
+  updatedAt: string;
+}
+
+export interface EnqueueLocalSessionCommandParams {
+  commandType: LocalSessionCommandType;
+  payload?: Record<string, unknown> | null;
+}
+
+export interface AcknowledgeLocalSessionCommandParams {
+  status?: Extract<LocalSessionCommandStatus, 'acknowledged' | 'completed' | 'cancelled'>;
+  payload?: Record<string, unknown> | null;
+  acknowledgedAt?: string | null;
+  completedAt?: string | null;
+}
+
+export interface LocalBridgeThreadEvent {
+  type: string;
+  [key: string]: unknown;
+}
+
+export interface LocalBridgeIngestEventsResult {
+  success: boolean;
+  eventsProcessed: number;
+  persistedCount: number;
 }
 
 // ============================================================================

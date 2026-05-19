@@ -31,13 +31,17 @@ import type { ApiClientConfig } from './cloud/ApiClient';
 import {
   ProjectsResource,
   EnvironmentsResource,
+  ComputersResource,
   ThreadsResource,
+  TasksResource,
+  NotificationsResource,
   AgentsResource,
   ResourcesResource,
   WebAppsResource,
   FunctionsResource,
   AuthResource,
   AgentRuntimesResource,
+  SecretsResource,
   DatabasesResource,
   SkillsResource,
   BudgetResource,
@@ -47,6 +51,7 @@ import {
   OrchestrationsResource,
   GitResource,
   FilesResource,
+  LocalBridgeResource,
 } from './cloud/resources';
 import type {
   HealthCheck,
@@ -165,9 +170,10 @@ export interface RunResult {
  * resources through typed methods:
  *
  * - `threads` - Conversation management with SSE streaming
+ * - `tasks` - Planning tasks, comments, releases, sprints, and task threads
  * - `environments` / `computers` - Computer configuration and lifecycle
- * - `resources` - Deployable apps, functions, auth modules, and runtimes
- * - `webApps` / `functions` / `auth` / `runtimes` - Product-shaped resource managers
+ * - `resources` - Deployable apps, functions, auth modules, runtimes, and secret vaults
+ * - `webApps` / `functions` / `auth` / `runtimes` / `secrets` - Product-shaped resource managers
  * - `databases` - Managed database surfaces
  * - `skills` - Custom ACP skills
  * - `agents` - Agent configuration
@@ -175,6 +181,7 @@ export interface RunResult {
  * - `schedules` - Scheduled task management
  * - `billing` - Budget and usage tracking
  * - `git` - Git operations on computers (compatibility helper)
+ * - `notifications` - In-app notifications and push token registration
  *
  * For simple use cases, use the `run()` method which handles thread
  * creation and streaming automatically.
@@ -207,6 +214,11 @@ export class ComputerAgentsClient {
   readonly threads: ThreadsResource;
 
   /**
+   * Planning tasks, comments, sprints, releases, and task-thread execution.
+   */
+  readonly tasks: TasksResource;
+
+  /**
    * Environment management
    *
    * Create and manage isolated execution environments.
@@ -224,9 +236,12 @@ export class ComputerAgentsClient {
   readonly environments: EnvironmentsResource;
 
   /**
-   * Product-level alias for `environments`.
+   * Product-level computer surface.
+   *
+   * This includes the full environment lifecycle plus high-level local computer
+   * support via `create({ local: ... })`, `connectLocal()`, and `listLocal()`.
    */
-  readonly computers: EnvironmentsResource;
+  readonly computers: ComputersResource;
 
   /**
    * Agent configuration
@@ -246,7 +261,7 @@ export class ComputerAgentsClient {
   readonly agents: AgentsResource;
 
   /**
-   * Managed resource surfaces such as web apps, functions, auth modules, and agent runtimes.
+   * Managed resource surfaces such as web apps, functions, auth modules, agent runtimes, and secret vaults.
    */
   readonly resources: ResourcesResource;
 
@@ -274,6 +289,11 @@ export class ComputerAgentsClient {
    * Explicit alias for `runtimes`.
    */
   readonly agentRuntimes: AgentRuntimesResource;
+
+  /**
+   * First-class secrets vault management.
+   */
+  readonly secrets: SecretsResource;
 
   /**
    * Managed database surfaces and document operations.
@@ -422,6 +442,26 @@ export class ComputerAgentsClient {
   readonly git: GitResource;
 
   /**
+   * Product notifications and push tokens.
+   */
+  readonly notifications: NotificationsResource;
+
+  /**
+   * Low-level additive local/remote bridge control plane.
+   *
+   * This surface manages registered local devices, workspace bindings,
+   * prepared push/pull sessions, local execution sessions, control polling,
+   * and structured local event ingest.
+   *
+   * Most developers should start with `client.computers.create({ local: ... })` and
+   * related high-level computer methods instead of using this surface directly.
+   *
+   * It does not perform local filesystem mutations directly. That remains the
+   * responsibility of the local bridge daemon.
+   */
+  readonly localBridge: LocalBridgeResource;
+
+  /**
    * Project access (internal - use files/resources/databases for data operations)
    * @internal
    */
@@ -457,8 +497,9 @@ export class ComputerAgentsClient {
 
     // Initialize all resource managers
     this.threads = new ThreadsResource(this.api);
+    this.tasks = new TasksResource(this.api);
     this.environments = new EnvironmentsResource(this.api);
-    this.computers = this.environments;
+    this.computers = new ComputersResource(this.api);
     this.agents = new AgentsResource(this.api);
     this.resources = new ResourcesResource(this.api);
     this.webApps = new WebAppsResource(this.api);
@@ -466,6 +507,7 @@ export class ComputerAgentsClient {
     this.auth = new AuthResource(this.api);
     this.runtimes = new AgentRuntimesResource(this.api);
     this.agentRuntimes = this.runtimes;
+    this.secrets = new SecretsResource(this.api);
     this.databases = new DatabasesResource(this.api);
     this.skills = new SkillsResource(this.api);
     this.files = new FilesResource(this.api);
@@ -475,6 +517,8 @@ export class ComputerAgentsClient {
     this.budget = new BudgetResource(this.api);
     this.billing = new BillingResource(this.api);
     this.git = new GitResource(this.api);
+    this.notifications = new NotificationsResource(this.api);
+    this.localBridge = new LocalBridgeResource(this.api);
     this.projects = new ProjectsResource(this.api);
   }
 
